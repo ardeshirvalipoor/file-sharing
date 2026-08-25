@@ -1,0 +1,32 @@
+{
+    "name": "file-sharing",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Upload a large file, get a link, share it.",
+    "scripts": {
+        "dev": "concurrently -k -n api,app -c blue,magenta \"npm:dev:api\" \"npm:dev:app\"",
+        "dev:api": "tsx watch api/server.ts",
+        "dev:app": "npm run build:app -- --watch",
+        "build": "npm run build:api && npm run build:app",
+        "build:api": "tsc -p tsconfig.json",
+        "build:app": "esbuild app/index.ts --bundle --outfile=public/bundle.js --format=esm --target=es2020 --sourcemap",
+        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p app/tsconfig.json",
+        "start": "node dist/server.js"
+    },
+    "dependencies": {
+        "@aws-sdk/client-s3": "^3.859.0",
+        "@aws-sdk/s3-request-presigner": "^3.859.0",
+        "dotenv": "^17.2.1",
+        "express": "^5.1.0",
+        "zod": "^4.0.17"
+    },
+    "devDependencies": {
+        "@codesuma/baseline": "^1.2.1",
+        "@types/express": "^5.0.3",
+        "@types/node": "^24.2.0",
+        "concurrently": "^9.2.0",
+        "esbuild": "^0.25.9",
+        "tsx": "^4.20.3",
+        "typescript": "^5.9.2"
+    }
+}

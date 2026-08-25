@@ -1,0 +1,50 @@
+.zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 220px;
+    padding: 32px 24px;
+    border: 2px dashed var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.zone:hover,
+.zone.hot {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 26px;
+    line-height: 1;
+}
+
+.zone.hot .icon {
+    background: var(--surface);
+}
+
+.title {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.hint {
+    max-width: 320px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+}

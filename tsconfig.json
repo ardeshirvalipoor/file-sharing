@@ -1,0 +1,15 @@
+{
+    // Builds the server. The browser app has its own tsconfig in app/.
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "CommonJS",
+        "moduleResolution": "Node",
+        "rootDir": "api",
+        "outDir": "dist",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "sourceMap": true
+    },
+    "include": ["api"]
+}

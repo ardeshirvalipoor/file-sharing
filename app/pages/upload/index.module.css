@@ -1,0 +1,37 @@
+.fileRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+}
+
+.fileName {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.fileMeta {
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.shareRow {
+    display: flex;
+    gap: 8px;
+}
+
+.shareInput {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+}

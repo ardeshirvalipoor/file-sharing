@@ -1,0 +1,28 @@
+app = "filesharing"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Not a secret, so it lives here where you can read it. Share links are built
+# from this address, so it has to match how people reach the service.
+[env]
+  PUBLIC_BASE_URL = "https://filesharing.fly.dev"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+
+# File bytes never pass through this machine, so the smallest one is enough. It
+# signs URLs and serves a small page, nothing more.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

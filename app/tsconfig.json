@@ -1,0 +1,18 @@
+{
+    // Type-checks the browser app. esbuild does the actual bundling and does
+    // not type-check, so `npm run typecheck` is what catches type mistakes.
+    "compilerOptions": {
+        "target": "ES2020",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "noEmit": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "skipLibCheck": true,
+        "lib": ["DOM", "DOM.Iterable", "ES2020"],
+        "types": []
+    },
+    // Baseline ships TypeScript source rather than compiled JavaScript, so its
+    // files are part of our program.
+    "include": ["./**/*.ts", "../node_modules/@codesuma/baseline/**/*.ts"]
+}
