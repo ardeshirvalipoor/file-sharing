@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import * as handlers from '../handlers/files'
+import handlers from '../handlers'
 
 export const fileRoutes = Router()
 
-fileRoutes.get('/:id', handlers.info)
-fileRoutes.get('/:id/download', handlers.download)
+fileRoutes.get('/:id', handlers.files.info)
+fileRoutes.get('/:id/download', handlers.files.download)

@@ -8,7 +8,7 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { HttpError } from '../lib/http-error'
-import * as uploads from '../services/uploads'
+import services from '../services'
 
 const startSchema = z.object({
     fileName: z.string().min(1).max(255),
@@ -19,28 +19,28 @@ const startSchema = z.object({
 // POST /api/uploads
 export async function start(req: Request, res: Response) {
     const file = parse(startSchema, req.body)
-    res.status(201).json(await uploads.start(file))
+    res.status(201).json(await services.uploads.start(file))
 }
 
 // GET /api/uploads/:token/parts
 export async function uploadedParts(req: Request<{ token: string }>, res: Response) {
-    res.json({ parts: await uploads.uploadedParts(req.params.token) })
+    res.json({ parts: await services.uploads.uploadedParts(req.params.token) })
 }
 
 // GET /api/uploads/:token/parts/:partNumber/url
 export async function partUrl(req: Request<{ token: string; partNumber: string }>, res: Response) {
-    const url = await uploads.partUrl(req.params.token, Number(req.params.partNumber))
+    const url = await services.uploads.partUrl(req.params.token, Number(req.params.partNumber))
     res.json({ url })
 }
 
 // POST /api/uploads/:token/complete
 export async function finish(req: Request<{ token: string }>, res: Response) {
-    res.json(await uploads.finish(req.params.token))
+    res.json(await services.uploads.finish(req.params.token))
 }
 
 // DELETE /api/uploads/:token
 export async function cancel(req: Request<{ token: string }>, res: Response) {
-    await uploads.cancel(req.params.token)
+    await services.uploads.cancel(req.params.token)
     res.status(204).end()
 }
 
