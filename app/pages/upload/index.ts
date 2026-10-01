@@ -85,12 +85,14 @@ export const UploadPage = () => {
     expiryLabel.append(Span(t('expiryLabel')))
     const expirySelect = Base('select')
     expirySelect.addClass(styles.expirySelect)
-    expirySelect.el.setAttribute('aria-label', 'Link expiration')
+    expirySelect.el.setAttribute('aria-label', t('expiryLabel'))
     for (const choice of expiryChoices) {
         const option = Base('option')
         option.el.setAttribute('value', choice.value)
         option.el.textContent = choice.label
+        expirySelect.append(option)
     }
+    expirySelect.el.value = '1h'
     expiryLabel.append(expirySelect)
     expiryRow.append(expiryLabel)
 
