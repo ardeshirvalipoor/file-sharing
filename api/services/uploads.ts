@@ -9,11 +9,15 @@ import { newFileId, objectKey } from '../lib/file-id'
 import * as storage from '../lib/storage'
 import { readUploadToken, writeUploadToken } from '../lib/upload-token'
 import { HttpError } from '../lib/http-error'
+import { createShareLink, hashPassword, LinkExpiry, shareLinkExpiresAt } from '../lib/share-link'
 
+// The upload contract now accepts an optional password. The service validates it
+// early and stores only a hash instead of the plain secret.
 export interface NewUpload {
     fileName: string
     contentType: string
     size: number
+    password?: string
 }
 
 export interface StartedUpload {
@@ -29,11 +33,19 @@ export async function start(file: NewUpload): Promise<StartedUpload> {
         throw new HttpError(413, `Files can be at most ${MAX_FILE_SIZE / (1024 * 1024 * 1024)} GB`)
     }
 
+    // An optional password is accepted only when it is long enough. The service
+    // hashes it before storing anything in the bucket metadata.
+    const password = file.password?.trim()
+    if (password !== undefined && password.length > 0 && password.length < 6) {
+        throw new HttpError(400, 'Passwords must be at least 6 characters long')
+    }
+
     const id = newFileId()
-    const uploadId = await storage.createMultipartUpload(objectKey(id), file.fileName, file.contentType)
+    const passwordHash = password ? hashPassword(password) : undefined
+    const uploadId = await storage.createMultipartUpload(objectKey(id), file.fileName, file.contentType, passwordHash)
 
     return {
-        token: writeUploadToken({ id, uploadId, ...file }),
+        token: writeUploadToken({ id, uploadId, passwordHash, fileName: file.fileName, contentType: file.contentType, size: file.size }),
         partSize: PART_SIZE,
         totalParts: countParts(file.size)
     }
@@ -60,7 +72,7 @@ export async function partUrl(token: string, partNumber: number): Promise<string
 }
 
 // Step four. Glue the parts together and return the link to share.
-export async function finish(token: string): Promise<{ id: string; url: string }> {
+export async function finish(token: string, expiresIn: LinkExpiry): Promise<{ id: string; url: string }> {
     const upload = readUploadToken(token)
     const key = objectKey(upload.id)
 
@@ -75,7 +87,19 @@ export async function finish(token: string): Promise<{ id: string; url: string }
 
     await storage.completeMultipartUpload(key, upload.uploadId, parts)
 
-    return { id: upload.id, url: `${config.publicBaseUrl}/f/${upload.id}` }
+    // Give the share link and its R2 cleanup marker the same expiration time.
+    const expiresAt = shareLinkExpiresAt(expiresIn)
+    await storage.scheduleFileDeletion({
+        id: upload.id,
+        fileName: upload.fileName,
+        contentType: upload.contentType,
+        size: upload.size,
+        passwordProtected: Boolean(upload.passwordHash),
+        expiresAt,
+        recordedAt: Math.floor(Date.now() / 1000)
+    })
+
+    return { id: upload.id, url: createShareLink(upload.id, expiresIn, expiresAt) }
 }
 
 // Give up on an upload and let the storage throw away the parts it collected.

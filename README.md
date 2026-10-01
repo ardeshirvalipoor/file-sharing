@@ -76,7 +76,10 @@ anything. It stops working after an hour.
 
 ### Downloading
 
-The share link `/f/AbC123` opens the app. Then this happens.
+The signed share link `/f/AbC123?expires=...&signature=...` opens the app. Its
+expiry is one hour, one day, or one week after upload completion. The server
+checks the signature and expiry before showing file details or issuing a
+download redirect. Then this happens.
 
 ```text
    +-----------------+                      +-----------------------------+
@@ -222,8 +225,9 @@ user interface.
 ## Limits and what is missing
 
 - One file per upload, up to 1 GB.
-- A share link never expires. Add a lifecycle rule on the bucket if you want
-  files to disappear after a week.
+- Share links expire after 1 hour, 1 day, or 1 week. Expiration disables the
+  link but does not delete the object from R2; use a bucket lifecycle rule if
+  stored files should also be removed automatically.
 - Anyone holding a link can download the file. There are no accounts and no
   passwords.
 - An interrupted upload can be resumed for 7 days. New R2 buckets come with a

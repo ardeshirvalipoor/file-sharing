@@ -1,0 +1,121 @@
+<!-- Static privacy page for the file-sharing consent checkbox. It explains how the
+     app handles uploads, links, and optional passwords. -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Linkify — Privacy Policy</title>
+    <meta name="description" content="Privacy policy for Linkify private file sharing." />
+    <style>
+      :root {
+        --bg: #f3f6f3;
+        --card: #ffffff;
+        --line: #dfe9e1;
+        --ink: #111827;
+        --muted: #4b5563;
+        --brand: #14532d;
+        --brand-soft: #ecfdf5;
+        --shadow: rgba(17, 24, 39, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(180deg, #f6faf7 0%, #eef4ef 100%);
+        color: var(--ink);
+      }
+
+      .shell {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+
+      .brand {
+        display: inline-block;
+        margin-bottom: 6px;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--brand);
+        font-weight: 700;
+      }
+
+      .hero {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 12px 30px var(--shadow);
+        padding: 32px 28px 24px;
+      }
+
+      h1 {
+        margin: 0 0 16px;
+        font-size: clamp(2rem, 4vw, 3rem);
+        color: var(--ink);
+      }
+
+      h2 {
+        margin-top: 28px;
+        font-size: 1.2rem;
+        color: var(--ink);
+      }
+
+      p, li {
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .benefits {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+        margin: 22px 0 18px;
+      }
+
+      .benefit {
+        background: var(--brand-soft);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 14px;
+      }
+
+      .benefit strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--brand);
+      }
+
+      a {
+        color: var(--brand);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .back {
+        display: inline-block;
+        margin-top: 20px;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="hero">
+        <span class="brand">Linkify</span>
+        <h1>Privacy Policy</h1>
+
+        <p>Linkify is designed to keep file transfers private. Uploaded file data is stored in private object storage and is not made public.</p>
+        <p>The app creates signed share links with a short expiration time. Those links are the main way anyone can access a finished file, and they are invalidated as soon as they expire.</p>
+        <p>If you enable password protection, the app stores only a hash of the password, not the plain text password itself. This helps protect the file without retaining the secret in plain view.</p>
+        <p>We do not keep a database of the file contents. We keep only the metadata needed to manage the upload and the signed link lifecycle.</p>
+        <p>Because file-sharing services handle user content, you are responsible for the information you upload and share. Please do not upload personal data or sensitive documents unless you intend to share them via the selected protected link.</p>
+        <a class="back" href="/">Back to the app</a>
+      </div>
+    </div>
+  </body>
+</html>

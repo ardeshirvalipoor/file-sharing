@@ -6,6 +6,9 @@
 
 import { http } from '@codesuma/baseline'
 
+// The browser and server share the same accepted link-lifetime values.
+export type LinkExpiry = '1h' | '1d' | '1w'
+
 export interface StartedUpload {
     token: string
     partSize: number
@@ -18,19 +21,23 @@ export interface UploadedPart {
     size: number
 }
 
+// The browser API now reports whether a file is protected and can pass an
+// optional password through the upload flow without changing the rest of the app.
 export interface FileInfo {
     id: string
     fileName: string
     contentType: string
     size: number
+    protected: boolean
 }
 
-export async function startUpload(file: File): Promise<StartedUpload> {
+export async function startUpload(file: File, password?: string): Promise<StartedUpload> {
     return unwrap<StartedUpload>(await http.post('/api/uploads', {
         fileName: file.name,
         // An unknown type is normal for files with no extension.
         contentType: file.type || 'application/octet-stream',
-        size: file.size
+        size: file.size,
+        password
     }))
 }
 
@@ -44,16 +51,19 @@ export async function partUrl(token: string, partNumber: number): Promise<string
     return body.url
 }
 
-export async function finishUpload(token: string): Promise<{ id: string; url: string }> {
-    return unwrap(await http.post(`/api/uploads/${token}/complete`))
+export async function finishUpload(token: string, expiresIn: LinkExpiry): Promise<{ id: string; url: string }> {
+    return unwrap(await http.post(`/api/uploads/${token}/complete`, { expiresIn }))
 }
 
 export async function cancelUpload(token: string): Promise<void> {
     unwrap(await http.delete(`/api/uploads/${token}`))
 }
 
-export async function fileInfo(id: string): Promise<FileInfo> {
-    return unwrap<FileInfo>(await http.get(`/api/files/${id}`))
+export async function fileInfo(id: string, password?: string): Promise<FileInfo> {
+    const query = new URLSearchParams(window.location.search)
+    if (password) query.set('password', password)
+    else query.delete('password')
+    return unwrap<FileInfo>(await http.get(`/api/files/${id}?${query.toString()}`))
 }
 
 function unwrap<T>(response: { status: number; data: any }): T {

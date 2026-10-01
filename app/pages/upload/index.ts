@@ -4,12 +4,14 @@
 // moves between five stages by showing and hiding them. Reading setStage() below
 // tells you everything about what the screen can look like.
 
-import { Button, Div, H1, Input, P, Page, waitFor } from '@codesuma/baseline'
+import { Base, Button, Div, H1, Input, P, Page, Span, waitFor } from '@codesuma/baseline'
 import { Progress } from '../../components/progress'
 import { DropZone } from '../../components/drop-zone'
+import * as api from '../../lib/api'
 import { fileSize } from '../../lib/format'
 import { discardUpload, resumableUpload, uploadFile } from '../../lib/upload'
 import { show } from '../../lib/show'
+import { createPreferencesBar, t, translateUploadStatus } from '../../lib/preferences'
 import styles from './index.module.css'
 
 // The server enforces this too. Checking here only saves a pointless round trip
@@ -21,17 +23,126 @@ type Stage = 'idle' | 'chosen' | 'uploading' | 'done' | 'failed'
 export const UploadPage = () => {
     const page = Page()
     page.addClass('screen')
+    const preferencesBar = createPreferencesBar()
 
     const card = Div()
     card.addClass('card')
 
-    const heading = H1('Send a big file')
+    // Put the product name in the main heading so the brand is immediately clear.
+    const heading = H1('Linkify')
     heading.addClass('heading')
 
-    const intro = P('Upload up to 1 GB and share the link. Close the tab halfway through and the next attempt carries on from where it stopped.')
+    // Keep the 1 GB limit and resumable-upload promise visible in the introduction.
+    const intro = P(t('intro'))
     intro.addClass('intro')
 
-    const dropZone = DropZone()
+    const benefitsWrap = Div()
+    benefitsWrap.addClass('benefits-wrap')
+    const benefitsTitle = Base('h2')
+    benefitsTitle.addClass('benefits-title')
+    benefitsTitle.text(t('benefitsTitle'))
+    const benefits = Div()
+    benefits.addClass('benefits')
+    const benefitItems = [
+        { emoji: '⚡', title: t('fast'), text: t('fastDetail') },
+        { emoji: '🔒', title: t('private'), text: t('privateDetail') },
+        { emoji: '🛡️', title: t('safe'), text: t('safeDetail') },
+        { emoji: '↩️', title: t('resumable'), text: t('resumableDetail') },
+        { emoji: '✨', title: t('simple'), text: t('simpleDetail') },
+        { emoji: '✅', title: t('reliable'), text: t('reliableDetail') }
+    ]
+    for (const item of benefitItems) {
+        const block = Div()
+        block.addClass('benefit')
+        const heading = Base('strong')
+        heading.text(`${item.emoji} ${item.title}`)
+        const detail = Span(item.text)
+        block.append(heading, detail)
+        benefits.append(block)
+    }
+    benefitsWrap.append(benefitsTitle, benefits)
+
+    // Explain Linkify's purpose and the core transfer behavior below the benefits.
+    const aboutWrap = Div()
+    aboutWrap.addClass('about-wrap')
+    const aboutTitle = Base('h2')
+    aboutTitle.addClass('about-title')
+    aboutTitle.text(t('aboutTitle'))
+    const aboutDescription = P(t('aboutDescription'))
+    aboutDescription.addClass('about-description')
+    aboutWrap.append(aboutTitle, aboutDescription)
+
+    // Offer only the three supported link lifetimes in a native accessible select.
+    const expiryChoices: { value: api.LinkExpiry; label: string }[] = [
+        { value: '1h', label: t('hour') },
+        { value: '1d', label: t('day') },
+        { value: '1w', label: t('week') }
+    ]
+    const expiryRow = Div()
+    expiryRow.addClass(styles.expiryRow)
+    const expiryLabel = Base('label')
+    expiryLabel.addClass(styles.expiryLabel)
+    expiryLabel.append(Span(t('expiryLabel')))
+    const expirySelect = Base('select')
+    expirySelect.addClass(styles.expirySelect)
+    expirySelect.el.setAttribute('aria-label', t('expiryLabel'))
+    for (const choice of expiryChoices) {
+        const option = Base('option')
+        option.el.setAttribute('value', choice.value)
+        option.el.textContent = choice.label
+        expirySelect.append(option)
+    }
+    expirySelect.el.value = '1h'
+    expiryLabel.append(expirySelect)
+    expiryRow.append(expiryLabel)
+
+    // A password toggle lets the uploader choose whether a sensitive file should be
+    // protected before the share link is created.
+    const passwordRow = Div()
+    passwordRow.addClass(styles.passwordRow)
+    const passwordToggle = Input('', 'checkbox', { checked: false })
+    passwordToggle.addClass(styles.passwordToggle)
+    const passwordLabel = Base('label')
+    passwordLabel.addClass(styles.passwordLabel)
+    passwordLabel.append(passwordToggle, Span(t('protect')))
+    const passwordInput = Input('', 'password')
+    passwordInput.addClass(styles.passwordInput)
+    passwordInput.el.setAttribute('placeholder', t('passwordPlaceholder'))
+    passwordInput.el.setAttribute('aria-label', t('enterPassword'))
+    passwordRow.append(passwordLabel, passwordInput)
+
+    const dropZone = DropZone(t('dropTitle'), t('dropHint'))
+
+    // Terms live directly under the upload field so an uploader has to agree before
+    // a file can be selected or sent.
+    const termsRow = Div()
+    termsRow.addClass(styles.termsRow)
+    const termsCheckbox = Input('', 'checkbox', { checked: false })
+    termsCheckbox.addClass(styles.termsCheckbox)
+    const termsLabel = Base('label')
+    termsLabel.addClass(styles.termsLabel)
+    const termsText = Span(`${t('agree')} `)
+    const termsLink = Base('a')
+    termsLink.el.href = '/terms.html'
+    termsLink.el.target = '_blank'
+    termsLink.el.rel = 'noopener noreferrer'
+    termsLink.el.textContent = t('terms')
+    const termsAnd = Span(` ${t('and')} `)
+    const privacyLink = Base('a')
+    privacyLink.el.href = '/privacy.html'
+    privacyLink.el.target = '_blank'
+    privacyLink.el.rel = 'noopener noreferrer'
+    privacyLink.el.textContent = t('privacy')
+    termsLabel.append(termsCheckbox, termsText, termsLink, termsAnd, privacyLink)
+    termsRow.append(termsLabel)
+
+    // The preview area shows a quick thumbnail or media snapshot for images, video,
+    // and PDFs before the user shares the final link.
+    const previewWrap = Div()
+    previewWrap.addClass(styles.previewWrap)
+    const previewMedia = Div()
+    previewMedia.addClass(styles.previewMedia)
+    previewWrap.append(previewMedia)
 
     // --- the chosen file -----------------------------------------------------
 
@@ -45,13 +156,13 @@ export const UploadPage = () => {
     fileRow.addClass(styles.fileRow)
     fileRow.append(fileName, fileMeta)
 
-    const resumeNote = P('We still have part of this file from an earlier attempt. Continuing will only send what is missing.')
+    const resumeNote = P(t('resumeNote'))
     resumeNote.addClass('note')
 
-    const uploadButton = Button('Upload')
+    const uploadButton = Button(t('upload'))
     uploadButton.addClass('button', 'primary')
 
-    const discardButton = Button('Start fresh')
+    const discardButton = Button(t('discard'))
     discardButton.addClass('button', 'secondary')
 
     const actions = Div()
@@ -70,36 +181,56 @@ export const UploadPage = () => {
     const shareInput = Input('', 'text', { readonly: true })
     shareInput.addClass(styles.shareInput)
 
-    const copyButton = Button('Copy')
+    const copyButton = Button(t('copy'))
     copyButton.addClass('button', 'secondary')
 
     const shareRow = Div()
     shareRow.addClass(styles.shareRow)
     shareRow.append(shareInput, copyButton)
 
+    // Confirm the selected expiration beside the completed share link.
+    const expirySummary = P('')
+    expirySummary.addClass('status')
+
     const error = P('')
     error.addClass('error')
 
-    const retryButton = Button('Try again')
+    const retryButton = Button(t('tryAgain'))
     retryButton.addClass('button', 'primary')
 
-    const againButton = Button('Send another file')
+    const againButton = Button(t('sendAnother'))
     againButton.addClass('button', 'secondary')
 
     const endActions = Div()
     endActions.addClass('actions')
     endActions.append(retryButton, againButton)
 
-    card.append(heading, intro, dropZone, fileRow, resumeNote, actions, progress, status, shareRow, error, endActions)
-    page.append(card)
+    card.append(heading, intro, expiryRow, passwordRow, dropZone, previewWrap, fileRow, resumeNote, actions, termsRow, progress, status, shareRow, expirySummary, error, endActions)
+    page.append(preferencesBar, card, benefitsWrap, aboutWrap)
 
     // --- state ---------------------------------------------------------------
 
     let chosen: File | null = null
     let canResume = false
+    let previewUrl: string | null = null
+
+    function updateUploadAvailability() {
+        const enabled = termsCheckbox.el.checked
+        uploadButton.el.disabled = !enabled
+        uploadButton.el.setAttribute('aria-disabled', String(!enabled))
+        if (!enabled) {
+            uploadButton.el.title = t('acceptBeforeUpload')
+        } else {
+            uploadButton.el.title = ''
+        }
+    }
 
     function setStage(stage: Stage) {
         show(dropZone, stage === 'idle')
+        show(expiryRow, stage === 'idle' || stage === 'chosen')
+        show(passwordRow, stage === 'idle' || stage === 'chosen')
+        show(termsRow, stage === 'idle' || stage === 'chosen')
+        show(previewWrap, stage === 'chosen' || stage === 'uploading')
         show(fileRow, stage !== 'idle')
         show(resumeNote, stage === 'chosen' && canResume)
         show(actions, stage === 'chosen')
@@ -107,18 +238,70 @@ export const UploadPage = () => {
         show(progress, stage === 'uploading')
         show(status, stage === 'uploading')
         show(shareRow, stage === 'done')
+        show(expirySummary, stage === 'done')
         show(error, stage === 'failed')
         show(endActions, stage === 'done' || stage === 'failed')
         show(retryButton, stage === 'failed')
     }
 
+    function resetPreview() {
+        if (previewUrl) {
+            URL.revokeObjectURL(previewUrl)
+            previewUrl = null
+        }
+        previewMedia.el.innerHTML = ''
+    }
+
+    function renderPreview(file: File) {
+        resetPreview()
+        const type = file.type || ''
+
+        if (type.startsWith('image/')) {
+            const image = Base('img')
+            image.el.src = URL.createObjectURL(file)
+            image.el.alt = file.name
+            previewMedia.append(image)
+            previewUrl = image.el.src
+            return
+        }
+
+        if (type.startsWith('video/')) {
+            const video = Base('video')
+            video.el.src = URL.createObjectURL(file)
+            video.el.controls = true
+            video.el.muted = true
+            previewMedia.append(video)
+            previewUrl = video.el.src
+            return
+        }
+
+        if (type === 'application/pdf') {
+            const frame = Base('iframe')
+            frame.el.src = URL.createObjectURL(file)
+            frame.el.title = file.name
+            frame.el.setAttribute('sandbox', 'allow-scripts allow-same-origin')
+            previewMedia.append(frame)
+            previewUrl = frame.el.src
+        }
+    }
+
     async function choose(file: File) {
-        if (file.size > MAX_FILE_SIZE) {
-            chosen = null
-            error.text(`${file.name} is ${fileSize(file.size)}. The limit is 1 GB.`)
+        if (!termsCheckbox.el.checked) {
+            error.text(t('acceptBeforeSelect'))
             setStage('failed')
             show(fileRow, false)
             show(retryButton, false)
+            resetPreview()
+            return
+        }
+
+        if (file.size > MAX_FILE_SIZE) {
+            chosen = null
+            error.text(t('tooLarge', { name: file.name, size: fileSize(file.size) }))
+            setStage('failed')
+            show(fileRow, false)
+            show(retryButton, false)
+            resetPreview()
             return
         }
 
@@ -127,7 +310,8 @@ export const UploadPage = () => {
 
         fileName.text(file.name)
         fileMeta.text(fileSize(file.size))
-        uploadButton.text(canResume ? 'Continue upload' : 'Upload')
+        uploadButton.text(canResume ? t('continueUpload') : t('upload'))
+        renderPreview(file)
 
         setStage('chosen')
     }
@@ -135,53 +319,122 @@ export const UploadPage = () => {
     async function run() {
         if (!chosen) return
 
+        if (!termsCheckbox.el.checked) {
+            error.text(t('acceptBeforeUpload'))
+            setStage('failed')
+            return
+        }
+
+        const password = passwordToggle.el.checked ? passwordInput.value().trim() : undefined
+        if (password !== undefined && password.length < 6) {
+            error.text(t('passwordTooShort'))
+            setStage('failed')
+            return
+        }
+
+        const expiresIn = (expirySelect.el as HTMLSelectElement).value as api.LinkExpiry
         progress.reset()
-        status.text('Preparing the upload')
+        status.text(t('preparingUpload'))
         setStage('uploading')
 
         try {
             const finished = await uploadFile(chosen, {
-                onStatus: message => status.text(message),
+                onStatus: message => status.text(translateUploadStatus(message)),
                 onProgress: report => progress.update(report.uploadedBytes, report.totalBytes)
-            })
+            }, expiresIn, password)
 
             shareInput.setValue(finished.url)
+            expirySummary.text(t('expirySummary', { duration: expiryChoices.find(choice => choice.value === expiresIn)?.label ?? '' }))
             canResume = false
             setStage('done')
         } catch (problem) {
             // Whatever went wrong, the parts that did arrive are still in the
             // bucket, so "Try again" really does continue rather than restart.
             canResume = true
-            error.text(problem instanceof Error ? problem.message : 'The upload failed')
+            error.text(problem instanceof Error ? problem.message : t('uploadFailed'))
             setStage('failed')
         }
     }
 
     dropZone.on('file', (file: File) => { void choose(file) })
-    uploadButton.on('click', () => { void run() })
+    uploadButton.on('click', () => {
+        if (!termsCheckbox.el.checked) {
+            error.text(t('acceptBeforeUpload'))
+            setStage('failed')
+            return
+        }
+        void run()
+    })
     retryButton.on('click', () => { void run() })
 
     discardButton.on('click', async () => {
         if (!chosen) return
         await discardUpload(chosen)
         canResume = false
-        uploadButton.text('Upload')
+        uploadButton.text(t('upload'))
         setStage('chosen')
     })
 
     againButton.on('click', () => {
         chosen = null
         canResume = false
+        passwordToggle.el.checked = false
+        passwordInput.setValue('')
+        termsCheckbox.el.checked = false
+        resetPreview()
         setStage('idle')
     })
 
+    // Copying a fresh share link uses the browser clipboard when available and a
+    // textarea fallback when permission is blocked. The button text changes to
+    // "Copied" to confirm the action immediately.
     copyButton.on('click', async () => {
-        await navigator.clipboard.writeText(shareInput.value())
-        copyButton.text('Copied')
+        const value = shareInput.value()
+
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value)
+            } else {
+                const area = document.createElement('textarea')
+                area.value = value
+                area.setAttribute('readonly', 'true')
+                area.style.position = 'fixed'
+                area.style.left = '-9999px'
+                document.body.append(area)
+                area.select()
+                document.execCommand('copy')
+                area.remove()
+            }
+        } catch {
+            const area = document.createElement('textarea')
+            area.value = value
+            area.setAttribute('readonly', 'true')
+            area.style.position = 'fixed'
+            area.style.left = '-9999px'
+            document.body.append(area)
+            area.select()
+            document.execCommand('copy')
+            area.remove()
+        }
+
+        copyButton.text(t('copied'))
         await waitFor(1500)
-        copyButton.text('Copy')
+        copyButton.text(t('copy'))
     })
 
+    termsCheckbox.el.addEventListener('change', () => {
+        updateUploadAvailability()
+        if (termsCheckbox.el.checked) {
+            error.text('')
+            show(error, false)
+        }
+    })
+
+    passwordToggle.el.addEventListener('change', () => {
+        show(passwordInput, passwordToggle.el.checked)
+    })
+    show(passwordInput, false)
+    updateUploadAvailability()
     setStage('idle')
 
     return page
