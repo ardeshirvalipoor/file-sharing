@@ -1,34 +1,38 @@
 .zone {
+    /* A generous pale target makes the primary file action obvious at first glance. */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    min-height: 220px;
-    padding: 32px 24px;
-    border: 2px dashed var(--line);
+    gap: 12px;
+    min-height: 238px;
+    padding: 34px 24px;
+    border: 1px dashed var(--line);
     border-radius: var(--radius);
-    background: var(--surface);
+    background: var(--field-soft);
     text-align: center;
     cursor: pointer;
-    transition: border-color .15s ease, background .15s ease;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
 }
 
+/* Hover and drag states turn the target citrus green and add a small lift. */
 .zone:hover,
 .zone.hot {
     border-color: var(--accent);
     background: var(--accent-soft);
+    transform: translateY(-2px);
 }
 
+/* The existing plus symbol sits in a stable high-contrast tile. */
 .icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 46px;
-    height: 46px;
-    border-radius: 50%;
-    background: var(--accent-soft);
-    color: var(--accent);
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #17251f;
     font-size: 26px;
     line-height: 1;
 }
@@ -47,4 +51,12 @@
     color: var(--muted);
     font-size: 13px;
     line-height: 1.5;
+}
+
+/* The smaller target preserves breathing room on narrow screens. */
+@media (max-width: 520px) {
+    .zone {
+        min-height: 210px;
+        padding: 28px 18px;
+    }
 }

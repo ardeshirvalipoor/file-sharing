@@ -8,13 +8,18 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { HttpError } from '../lib/http-error'
+import type { LinkExpiry } from '../lib/share-link'
 import services from '../services'
 
 const startSchema = z.object({
     fileName: z.string().min(1).max(255),
     contentType: z.string().min(1).max(255),
-    size: z.number().int().positive()
+    size: z.number().int().positive(),
+    password: z.string().trim().min(6).max(128).optional()
 })
+
+// A completed upload gets exactly one of the lifetimes offered in the UI.
+const finishSchema = z.object({ expiresIn: z.enum(['1h', '1d', '1w']) })
 
 // POST /api/uploads
 export async function start(req: Request, res: Response) {
@@ -35,7 +40,8 @@ export async function partUrl(req: Request<{ token: string; partNumber: string }
 
 // POST /api/uploads/:token/complete
 export async function finish(req: Request<{ token: string }>, res: Response) {
-    res.json(await services.uploads.finish(req.params.token))
+    const { expiresIn } = parse<{ expiresIn: LinkExpiry }>(finishSchema, req.body)
+    res.json(await services.uploads.finish(req.params.token, expiresIn))
 }
 
 // DELETE /api/uploads/:token

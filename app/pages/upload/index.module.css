@@ -1,3 +1,40 @@
+.expiryRow {
+    /* Keep the expiration choice visible beside the upload action without crowding the drop target. */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--field-soft);
+}
+
+.expiryLabel {
+    /* Pair the select with a clear label for mouse, touch, and assistive technology. */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.expirySelect {
+    /* Give the native option control a stable size and match the shared form styling. */
+    min-width: 132px;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+}
+
 .fileRow {
     display: flex;
     align-items: baseline;
@@ -34,4 +71,108 @@
     background: var(--bg);
     color: var(--ink);
     font-size: 14px;
+}
+
+.passwordRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--field-soft);
+}
+
+.passwordLabel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.passwordToggle {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--brand, #14532d);
+}
+
+.passwordInput {
+    flex: 1;
+    min-width: 120px;
+    max-width: 220px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--field);
+    color: var(--ink);
+    font: inherit;
+}
+
+.termsRow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--field-soft);
+}
+
+.termsLabel {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.termsCheckbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--brand, #14532d);
+}
+
+.termsLabel a {
+    color: var(--brand, #14532d);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.previewWrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+}
+
+.previewMedia {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 420px);
+    min-height: 180px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--field), var(--field-soft));
+}
+
+.previewMedia img,
+.previewMedia video,
+.previewMedia iframe {
+    display: block;
+    max-width: 100%;
+    max-height: 280px;
+    width: auto;
+    height: auto;
+    border: 0;
+    border-radius: 8px;
+    background: var(--field);
 }

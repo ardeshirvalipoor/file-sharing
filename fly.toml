@@ -12,9 +12,10 @@ primary_region = "ams"
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = "stop"
+  # The in-process R2 expiry worker must run even when there is no web traffic.
+  auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[http_service.checks]]
     path = "/health"
