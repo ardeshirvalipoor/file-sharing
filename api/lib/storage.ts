@@ -14,7 +14,6 @@ import {
     CompleteMultipartUploadCommand,
     CreateMultipartUploadCommand,
     GetObjectCommand,
-    HeadObjectCommand,
     ListPartsCommand,
     S3Client,
     UploadPartCommand
@@ -43,12 +42,6 @@ const client = new S3Client({
 export interface StoredPart {
     partNumber: number
     etag: string
-    size: number
-}
-
-export interface StoredFile {
-    fileName: string
-    contentType: string
     size: number
 }
 
@@ -126,23 +119,6 @@ export async function abortMultipartUpload(key: string, uploadId: string): Promi
     }))
 }
 
-// The file's name, type and size, without fetching a single byte of it.
-// Returns null when there is no such file, because a dead share link is an
-// ordinary thing to happen and not an error.
-export async function headFile(key: string): Promise<StoredFile | null> {
-    try {
-        const head = await client.send(new HeadObjectCommand({ Bucket: config.r2.bucket, Key: key }))
-        return {
-            fileName: decodeURIComponent(head.Metadata?.filename ?? 'download'),
-            contentType: head.ContentType ?? 'application/octet-stream',
-            size: head.ContentLength ?? 0
-        }
-    } catch (error) {
-        if (isMissing(error)) return null
-        throw error
-    }
-}
-
 // A URL that downloads this one file for the next few minutes. The bucket itself
 // stays private, so this is the only way in.
 export function presignDownloadUrl(key: string, fileName: string): Promise<string> {
@@ -155,11 +131,6 @@ export function presignDownloadUrl(key: string, fileName: string): Promise<strin
     })
 
     return getSignedUrl(client, command, { expiresIn: DOWNLOAD_URL_TTL })
-}
-
-function isMissing(error: unknown): boolean {
-    const name = (error as { name?: string }).name
-    return name === 'NotFound' || name === 'NoSuchKey'
 }
 
 // Two spellings of the same name, as the header standard asks for. Old browsers

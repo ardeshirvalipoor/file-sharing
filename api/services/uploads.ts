@@ -6,6 +6,7 @@
 
 import { MAX_FILE_SIZE, PART_SIZE, config } from '../config'
 import { newFileId, objectKey } from '../lib/file-id'
+import * as db from '../lib/db'
 import * as storage from '../lib/storage'
 import { readUploadToken, writeUploadToken } from '../lib/upload-token'
 import { HttpError } from '../lib/http-error'
@@ -30,6 +31,12 @@ export async function start(file: NewUpload): Promise<StartedUpload> {
     }
 
     const id = newFileId()
+
+    // The row goes in before anything reaches R2. If this fails, nothing was
+    // created and the person sees an error. The other order would leave parts in
+    // the bucket that no row points at, which is the one mess we cannot find later.
+    await db.insertFile(id, file)
+
     const uploadId = await storage.createMultipartUpload(objectKey(id), file.fileName, file.contentType)
 
     return {
@@ -75,6 +82,11 @@ export async function finish(token: string): Promise<{ id: string; url: string }
 
     await storage.completeMultipartUpload(key, upload.uploadId, parts)
 
+    // R2 first, then the row. If this second call fails the bytes are safe and
+    // the row is merely out of date, which can be repaired. The other order would
+    // announce a file that is not there.
+    await db.markFileReady(upload.id)
+
     return { id: upload.id, url: `${config.publicBaseUrl}/f/${upload.id}` }
 }
 
@@ -82,6 +94,7 @@ export async function finish(token: string): Promise<{ id: string; url: string }
 export async function cancel(token: string): Promise<void> {
     const upload = readUploadToken(token)
     await storage.abortMultipartUpload(objectKey(upload.id), upload.uploadId)
+    await db.markFileDeleted(upload.id)
 }
 
 // Every part is PART_SIZE except the last, which holds the remainder.
