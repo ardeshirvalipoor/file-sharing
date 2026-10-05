@@ -69,6 +69,8 @@ export interface RetainedFileRecord {
 
 // Protected uploads keep only a password hash in the object metadata. That lets
 // the server validate a password later without saving the plain secret anywhere.
+// Opens a multipart upload and returns the id that ties all its parts together.
+// Nothing is stored yet; this only reserves the name.
 export async function createMultipartUpload(key: string, fileName: string, contentType: string): Promise<string> {
     const metadata: Record<string, string> = { filename: encodeURIComponent(fileName) }
 

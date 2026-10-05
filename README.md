@@ -239,7 +239,7 @@ fly secrets set `
   R2_ACCESS_KEY_ID=... `
   R2_SECRET_ACCESS_KEY=... `
   R2_BUCKET_NAME=... `
-  DATABASE_URL=...`
+  DATABASE_URL=... `
   UPLOAD_TOKEN_SECRET=... `
   PUBLIC_BASE_URL=https://your-app.fly.dev
 fly deploy
@@ -281,7 +281,7 @@ user interface.
 ## Limits and what is missing
 
 - One file per upload, up to 1 GB.
-- - A share link never expires. The `files` table has an `expires_at` column, but
+- A share link never expires. The `files` table has an `expires_at` column, but
   nothing writes to it. Add a lifecycle rule on the bucket if you want files to
   disappear after a week.
 - Anyone holding a link can download the file. There are no accounts and no
