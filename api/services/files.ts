@@ -25,6 +25,13 @@ export interface Visitor {
     userAgent: string | null
 }
 
+// Who is asking. The handler digs these out of the request, because nothing in
+// this file knows what an Express request is.
+export interface Visitor {
+    address: string
+    userAgent: string | null
+}
+
 // What the download page shows before anyone commits to a one gigabyte download.
 export async function info(id: string, expiry: unknown, signature: unknown, password?: string): Promise<FileInfo> {
     verifyShareLink(id, expiry, signature)

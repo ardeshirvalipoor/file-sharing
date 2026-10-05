@@ -62,26 +62,29 @@ This is also why the bucket needs a CORS rule. The browser is on our domain and
 the request goes to Cloudflare's domain, and browsers block that unless the other
 side says it is allowed. The README has the rule.
 
-## Idea three: no database
+## Idea three: the upload carries its own state
 
 Something has to remember that an upload is in progress: which object it is
 writing to, and which upload id the store gave us.
 
-The usual answer is a database. We do something simpler. The server puts that
-information in a small piece of text, signs it, and gives it to the browser. The
-browser sends it back with every later request. We call it the upload token, and
-it lives in `api/lib/upload-token.ts`.
+The usual answer is to write that down somewhere and look it up on every later
+request. We do something simpler. The server puts that information in a small
+piece of text, signs it, and gives it to the browser. The browser sends it back
+with every later request. We call it the upload token, and it lives in
+`api/lib/upload-token.ts`.
 
 The signature is the important part. Without it, anyone could edit the token and
 write into somebody else's upload. With it, the server can check in one line that
 the token is exactly what it handed out, because only the server knows the secret
 used to sign it.
 
-This buys three things.
+This buys two things.
 
-- No database to run, back up, or pay for.
 - The Fly machine can restart between two parts and lose nothing.
 - Two Fly machines can serve the same upload, because neither holds any state.
+
+There is a database in this project, and this is not it. The database never holds
+an upload in progress. What it does hold has its own section further down.
 
 ## Idea four: ask the storage what it already has
 
@@ -126,6 +129,78 @@ a broken file.
 
 That is `finish` in `api/services/uploads.ts`.
 
+Finishing also flips the file's row in the database to `ready`. The order is R2
+first, then the row. If the row update fails, the bytes are safe and only the
+record is out of date, which can be put right. The other order would announce a
+share link for a file that is not there.
+
+## The database
+
+There is a database as well, and it is worth being clear about what it is not
+for. It holds no file bytes. It holds no upload in progress. If it were lost
+tomorrow, every file would still be sitting in the bucket, whole.
+
+It is an index. It answers the questions the bucket cannot.
+
+- Is there a file at this share id, and what is it called?
+- Did it finish, or did somebody give up halfway through?
+- How many times has it been downloaded, and when?
+- Whose file is it? Nothing fills this one in yet.
+
+It runs on Supabase, which is ordinary Postgres with other things built around
+it. We use only the Postgres part. One file talks to it, `api/lib/db.ts`, in the
+same way that one file talks to R2. The schema lives in `supabase/migrations`.
+
+There are three tables.
+
+| Table       | One row for                            |
+| ----------- | -------------------------------------- |
+| `files`     | Every upload that has been started     |
+| `downloads` | Every download that has happened       |
+| `profiles`  | Every account, once there are accounts |
+
+### The row goes in before the bytes
+
+The `files` row is written when an upload starts, not when it finishes.
+
+That order is deliberate. If the database write fails, nothing has been created
+in the bucket and the person sees an error. The other way round would leave parts
+in the bucket that no row points at, and those are the ones we could never find
+again.
+
+A row stays in status `uploading` until every part has arrived. So an abandoned
+upload leaves its row behind, and that row is how the parts it left in the bucket
+can be found and cleaned up later.
+
+A row that is still `uploading` is not a file. Neither is a row that was
+cancelled. Both answer a share link the same way an unused id does, with a 404.
+
+### What happens when a write fails
+
+Two different answers, and the difference is on purpose.
+
+An upload that cannot be recorded fails. A file in the bucket with no row
+pointing at it is invisible. Nobody can download it, and nobody can clean it up.
+
+A download that cannot be recorded still happens. The failure goes to the log and
+the person gets their file. A missing line in a tally is not a reason to refuse
+somebody a download.
+
+### What we keep about a person
+
+One row per download. It holds the time, the browser's user agent, and a hash of
+the address the request came from.
+
+The address itself is never stored. A plain hash would be no protection, because
+there are few enough addresses that somebody could try them all and compare, so
+the server's secret goes into the hash as well. What is left is enough to tell
+two downloads apart and useless for anything else.
+
+Supabase also publishes every table through a REST API that its public key can
+reach. All three tables have row level security turned on and no policies
+written, which means that API can see nothing at all. Our server connects as the
+database owner, and those rules do not apply to it.
+
 ## The five requests, end to end
 
 | Step | Request                                       | What happens                       |
@@ -139,9 +214,10 @@ That is `finish` in `api/services/uploads.ts`.
 Step 3 and step 4 repeat, three parts at a time.
 
 Downloading is shorter. The share link `/f/:id` opens the app. The app calls
-`GET /api/files/:id` to show the name and size. The download button goes to
-`GET /api/files/:id/download`, and the server answers with a redirect to a
-presigned URL that lasts five minutes.
+`GET /api/files/:id`, which reads the row for that id and answers with the name
+and size. The download button goes to `GET /api/files/:id/download`. That one
+writes a row in `downloads`, then answers with a redirect to a presigned URL
+that lasts five minutes.
 
 ## Reading the code
 
@@ -149,9 +225,10 @@ Start here, in this order.
 
 1. `api/config.ts` — every setting and every limit in one place.
 2. `api/lib/storage.ts` — the only file that talks to R2.
-3. `api/services/uploads.ts` — the four steps of an upload, as functions.
-4. `app/lib/upload.ts` — the browser side of the same four steps.
-5. `app/pages/upload/index.ts` — the screen, and nothing else.
+3. `api/lib/db.ts` — the only file that talks to Postgres.
+4. `api/services/uploads.ts` — the four steps of an upload, as functions.
+5. `app/lib/upload.ts` — the browser side of the same four steps.
+6. `app/pages/upload/index.ts` — the screen, and nothing else.
 
 The server has four layers, and each one has a single job.
 
@@ -169,10 +246,16 @@ has drifted into the wrong layer.
 
 Each of these is a small, self-contained change.
 
-- **Expiring links.** Add a lifecycle rule to the bucket, and put the expiry date
-  on the download page.
-- **A password.** Take one when the upload starts, hash it, store the hash as
-  object metadata, and ask for it before signing the download URL.
+- **Show the download count.** Every download is already recorded, and
+  `files.download_count` is already kept up to date. Nothing displays it. One
+  more field in the API response, and one more line on the download page.
+- **Expiring links.** The `files` table already has an `expires_at` column and
+  nothing writes to it. Take a date when the upload starts, put it there, refuse
+  the download once that date has passed, and add a lifecycle rule on the bucket
+  so the bytes go too.
+- **A password.** Take one when the upload starts, hash it, keep the hash in a
+  new column on `files`, and ask for it before signing the download URL. That one
+  needs a migration.
 - **Many files at once.** The upload engine already handles one file. Making the
   page hold a list of them changes only the page.
 - **Pause and resume.** Keep the `XMLHttpRequest` objects in a list and call
