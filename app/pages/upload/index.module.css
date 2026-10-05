@@ -59,7 +59,31 @@
 
 .shareRow {
     display: flex;
+    align-items: stretch;
     gap: 8px;
+}
+
+.shareActions {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+button.qrButton {
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
+    padding: 0;
+}
+
+.qrButton svg {
+    width: 23px;
+    height: 23px;
 }
 
 .shareInput {
@@ -73,8 +97,24 @@
     font-size: 14px;
 }
 
+@media (max-width: 560px) {
+    .shareRow {
+        flex-direction: column;
+    }
+
+    .shareActions {
+        width: 100%;
+    }
+
+    .shareActions button:not(.qrButton) {
+        flex: 1;
+    }
+}
+
 .passwordRow {
     display: flex;
+    /* Allow inline validation to occupy a full row beneath the password controls. */
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
@@ -113,12 +153,18 @@
 
 .termsRow {
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
+    /* Stack the consent explanation beneath the checkbox label. */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
     padding: 10px 12px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--field-soft);
+}
+
+.termsRow > p {
+    margin: 0;
 }
 
 .termsLabel {

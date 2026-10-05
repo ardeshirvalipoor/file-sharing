@@ -10,7 +10,7 @@
         "strictNullChecks": true,
         "skipLibCheck": true,
         "lib": ["DOM", "DOM.Iterable", "ES2020"],
-        "types": []
+        "types": ["node"]
     },
     // Baseline ships TypeScript source rather than compiled JavaScript, so its
     // files are part of our program.

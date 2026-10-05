@@ -11,6 +11,7 @@
 
 import { waitFor } from '@codesuma/baseline'
 import * as api from './api'
+import { describeUploadFailure } from './upload-error'
 import { fingerprint, forget, recall, remember } from './upload-store'
 
 // How many parts travel at once. More than a handful stops helping: the parts
@@ -30,11 +31,11 @@ export interface UploadOptions {
     onProgress(report: UploadReport): void
 }
 
-// Optional passwords are carried through the resumable upload flow so a file can
-// be protected without forcing the browser to restart its upload from the top.
+// The password is passed only at completion, so a resumed upload uses the
+// current value rather than a value captured when its token was first created.
 export async function uploadFile(file: File, options: UploadOptions, expiresIn: api.LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
-    const id = fingerprint(file)
-    const upload = await openUpload(file, id, options, password)
+    const id = await fingerprint(file)
+    const upload = await openUpload(file, id, options)
 
     // Bytes the storage already has. Zero for a fresh upload, possibly almost
     // the whole file for a resumed one.
@@ -71,7 +72,7 @@ export async function uploadFile(file: File, options: UploadOptions, expiresIn: 
     })
 
     options.onStatus('Putting the parts together')
-    const finished = await api.finishUpload(upload.token, expiresIn)
+    const finished = await api.finishUpload(upload.token, expiresIn, password)
 
     // The upload is done, so the note about it is no longer worth keeping.
     await forget(id)
@@ -82,7 +83,7 @@ export async function uploadFile(file: File, options: UploadOptions, expiresIn: 
 // Throws away an unfinished upload: tells the storage to drop the parts it
 // collected, then forgets our note about it.
 export async function discardUpload(file: File): Promise<void> {
-    const id = fingerprint(file)
+    const id = await fingerprint(file)
     const remembered = await recall(id)
     if (!remembered) return
 
@@ -97,8 +98,8 @@ export async function discardUpload(file: File): Promise<void> {
 }
 
 // Whether an earlier upload of this exact file is waiting to be continued.
-export function resumableUpload(file: File) {
-    return recall(fingerprint(file))
+export async function resumableUpload(file: File) {
+    return recall(await fingerprint(file))
 }
 
 interface OpenUpload {
@@ -110,7 +111,7 @@ interface OpenUpload {
 
 // Finds or creates the upload this file belongs to, and asks the storage what it
 // already has.
-async function openUpload(file: File, id: string, options: UploadOptions, password?: string): Promise<OpenUpload> {
+async function openUpload(file: File, id: string, options: UploadOptions): Promise<OpenUpload> {
     const remembered = await recall(id)
 
     if (remembered) {
@@ -127,7 +128,7 @@ async function openUpload(file: File, id: string, options: UploadOptions, passwo
     }
 
     options.onStatus('Preparing the upload')
-    const started = await api.startUpload(file, password)
+    const started = await api.startUpload(file)
 
     await remember({
         fingerprint: id,
@@ -179,10 +180,10 @@ function put(url: string, body: Blob, onProgress: (sentBytes: number) => void): 
 
         request.onload = () => {
             if (request.status >= 200 && request.status < 300) resolve()
-            else reject(new Error(`The storage answered ${request.status}`))
+            else reject(new Error(describeUploadFailure(`The storage answered ${request.status}`)))
         }
 
-        request.onerror = () => reject(new Error('The connection dropped'))
+        request.onerror = () => reject(new Error(describeUploadFailure('The connection dropped')))
         request.send(body)
     })
 }

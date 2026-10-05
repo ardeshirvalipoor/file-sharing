@@ -3,12 +3,14 @@
 Upload a file up to 1 GB, get a link, share it. An interrupted upload carries on
 from where it stopped, even after the browser is closed and reopened.
 
-The service runs on Fly.io. The files live in Cloudflare R2. The file bytes never
-travel through the Fly machine, so the smallest machine Fly sells is enough.
+The service runs on Fly.io. The files live in Cloudflare R2. What the service
+knows about those files lives in a Supabase Postgres database. The file bytes
+never travel through the Fly machine, so the smallest machine Fly sells is
+enough.
 
 ## How it works
 
-Three machines are involved. Each one holds something the other two do not.
+Four things are involved. Each one holds something the others do not.
 
 ```text
    +-----------------+                      +-----------------------------+
@@ -16,17 +18,24 @@ Three machines are involved. Each one holds something the other two do not.
    |                 |   small messages     |                             |
    |  the file       |<-------------------->|  keeps the R2 secret key    |
    |  on disk        |   a few hundred      |  signs URLs on the spot     |
-   |                 |   bytes each         |  no database                |
-   |  one note in    |                      |  no file bytes, ever        |
-   |  IndexedDB      |                      +-----------------------------+
-   |                 |
+   |                 |   bytes each         |  no file bytes, ever        |
+   |  one note in    |                      +--------------+--------------+
+   |  IndexedDB      |                                     |
+   |                 |                     small queries   |
+   |                 |                                     v
    |                 |                      +-----------------------------+
-   |                 |   the file itself    |  Cloudflare R2 (private)    |
-   |                 |=====================>|                             |
-   |                 |   8 MiB at a time,   |  files/AbC123               |
-   |                 |   128 times          |    the bytes                |
-   |                 |                      |    metadata: name, type,    |
-   |                 |                      |                and size     |
+   |                 |                      |  Supabase Postgres          |
+   |                 |                      |                             |
+   |                 |                      |  files      started uploads |
+   |                 |                      |  downloads  every download  |
+   |                 |                      |  profiles   accounts, later |
+   |                 |                      +-----------------------------+
+   |                 |
+   |                 |   the file itself    +-----------------------------+
+   |                 |=====================>|  Cloudflare R2 (private)    |
+   |                 |   8 MiB at a time,   |                             |
+   |                 |   128 times          |  files/AbC123               |
+   |                 |                      |    the bytes                |
    +-----------------+                      +-----------------------------+
 ```
 
@@ -36,10 +45,13 @@ The thick line goes past our machine, not through it. The browser sends each
 8 MiB part straight to Cloudflare. A 1 GB upload therefore costs our machine no
 bandwidth and no memory, which is why it can be the smallest machine Fly sells.
 
-The metadata is not stored on our machine. The file name, its type and its size
-travel with the object and live in R2, as metadata attached to the object. Our
-machine keeps no database at all, and no record that any upload ever happened.
+The Fly machine itself still stores nothing. It keeps nothing on disk and nothing
+in memory between requests, so Fly can replace it at any moment and lose nothing.
+What it has now is a database beside it.
 
+That database is an index and nothing more. It holds one row per file and one row
+per download. It holds no file bytes, and it holds no upload in progress. If it
+were lost tomorrow, every file would still be sitting in the bucket, whole.
 Two other things are worth pointing out in that picture.
 
 The R2 secret key sits only on our machine. It is never sent anywhere, and the
@@ -85,14 +97,14 @@ download redirect. Then this happens.
    +-----------------+                      +-----------------------------+
    |  Browser        |                      |  Fly machine (ours)         |
    |                 |  1 GET /api/files    |                             |
-   |  someone        |--------------------->|  looks up the name and      |
-   |  opened the     |  2 the name and size |  size in R2, with a         |
-   |  share link     |<---------------------|  HEAD request               |
+   |  someone        |--------------------->|  reads the row for this     |
+   |  opened the     |  2 the name and size |  id in Postgres             |
+   |  share link     |<---------------------|                             |
    |  /f/AbC123      |                      |                             |
-   |                 |  3 GET .../download  |  signs a GET URL for        |
-   |                 |--------------------->|  the object, good for       |
-   |                 |  4 a 302 redirect    |  five minutes               |
-   |                 |<---------------------|                             |
+   |                 |  3 GET .../download  |  writes a downloads row,    |
+   |                 |--------------------->|  then signs a GET URL for   |
+   |                 |  4 a 302 redirect    |  the object, good for five  |
+   |                 |<---------------------|  minutes                    |
    |                 |                      +-----------------------------+
    |                 |
    |                 |                      +-----------------------------+
@@ -109,6 +121,10 @@ machine. The file itself goes straight between the browser and Cloudflare.
 
 The bucket stays private throughout. A presigned URL that lasts five minutes is
 the only way in, and our machine is the only thing that can make one.
+
+An id whose upload never finished, and one that was cancelled, both answer step 1
+with a 404. They look exactly like a link that was never real, which is the
+right answer.
 
 ### Picking up an interrupted upload
 
@@ -136,8 +152,9 @@ The full walkthrough, with the reasoning behind every choice, is in
 
 1. A Cloudflare account with an R2 bucket.
 2. An R2 API token with Object Read and Write permission on that bucket.
-3. Node 22 or newer.
-4. A Fly.io account, when you are ready to deploy.
+3. A Supabase project, which is where the database lives.
+4. Node 22 or newer.
+5. A Fly.io account, when you are ready to deploy.
 
 ## Set up the bucket
 
@@ -162,12 +179,48 @@ You do not need to expose the ETag header, which most guides tell you to do. Our
 server asks R2 for the part list when it finishes an upload, so the browser never
 has to read that header.
 
+## Set up the database
+
+Create a project in Supabase. Then click **Connect** in the dashboard. You will
+see several connection strings. You need two of them, and they differ only in the
+port.
+
+| Which one          | Port | What it is for      |
+| ------------------ | ---- | ------------------- |
+| Transaction pooler | 6543 | The running server  |
+| Session pooler     | 5432 | Pushing a migration |
+
+Do not use the third one, the direct connection on `db.YOURREF.supabase.co`. It
+has no IPv4 address, so it fails from any machine or network without IPv6.
+
+Put the transaction pooler string in `.env` as `DATABASE_URL`, with your database
+password in place of `[YOUR-PASSWORD]`. Then create the tables, using the session
+pooler string:
+
+```powershell
+npx supabase db push --db-url "postgresql://postgres.YOURREF:PASSWORD@aws-1-YOURREGION.pooler.supabase.com:5432/postgres"
+```
+
+That reads `supabase/migrations` and creates three tables.
+
+| Table       | One row for                            |
+| ----------- | -------------------------------------- |
+| `files`     | Every upload that has been started     |
+| `downloads` | Every download that has happened       |
+| `profiles`  | Every account, once there are accounts |
+
+All three have row level security turned on and no policies written. Supabase
+publishes every table through a REST API that its public key can reach, and this
+shuts that door completely, so the API can see nothing at all. Our server
+connects as the database owner, and those rules do not apply to it.
+
+
 ## Run it on your machine
 
 ```powershell
 npm install
 copy .env.example .env
-# fill in the R2 values in .env
+#  fill in the R2 and database values in .env 
 npm run dev
 ```
 
@@ -186,10 +239,12 @@ fly secrets set `
   R2_ACCESS_KEY_ID=... `
   R2_SECRET_ACCESS_KEY=... `
   R2_BUCKET_NAME=... `
+  DATABASE_URL=...`
   UPLOAD_TOKEN_SECRET=... `
   PUBLIC_BASE_URL=https://your-app.fly.dev
 fly deploy
 ```
+Use the transaction pooler string for `DATABASE_URL` here as well.
 
 Add your Fly address to the bucket's CORS rule as well, or uploads will work on
 your machine and fail in production.
@@ -201,8 +256,9 @@ your machine and fail in production.
 | `api/routes`      | Which address maps to which handler                      |
 | `api/handlers`    | Reading the request, checking it, choosing a status code |
 | `api/services`    | The rules of an upload and of a download                 |
-| `api/lib`         | Talking to R2, signing tokens, making ids                |
+| `api/lib`         | Talking to R2 and Postgres, signing tokens, making ids   |
 | `api/middlewares` | Turning an error into a response                         |
+| `supabase`        | The database schema, one migration file per change       |
 | `app/pages`       | One folder per screen                                    |
 | `app/components`  | Pieces reused by more than one screen                    |
 | `app/lib`         | The upload engine, the API calls, small helpers          |
@@ -225,11 +281,14 @@ user interface.
 ## Limits and what is missing
 
 - One file per upload, up to 1 GB.
-- Share links expire after 1 hour, 1 day, or 1 week. Expiration disables the
-  link but does not delete the object from R2; use a bucket lifecycle rule if
-  stored files should also be removed automatically.
+- - A share link never expires. The `files` table has an `expires_at` column, but
+  nothing writes to it. Add a lifecycle rule on the bucket if you want files to
+  disappear after a week.
 - Anyone holding a link can download the file. There are no accounts and no
-  passwords.
+  passwords. The `profiles` table and the `owner_id` column on `files` are there,
+  waiting, and nothing fills them in.
+- Every download is recorded, and `files.download_count` is kept up to date.
+  Nothing shows either of them to anybody yet.
 - An interrupted upload can be resumed for 7 days. New R2 buckets come with a
   rule named "Default Multipart Abort Rule" that throws away the parts of an
   unfinished upload after a week. After that, the next attempt starts from zero.

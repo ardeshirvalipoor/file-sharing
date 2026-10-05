@@ -48,6 +48,7 @@ export const DownloadPage = () => {
     passwordWrap.el.style.display = 'flex'
     passwordWrap.el.style.gap = '8px'
     passwordWrap.el.style.flexWrap = 'wrap'
+    show(passwordWrap, false)
 
     const passwordInput = Input('', 'password')
     passwordInput.el.setAttribute('placeholder', t('enterPassword'))
@@ -57,6 +58,12 @@ export const DownloadPage = () => {
     const unlockButton = Button(t('unlock'))
     unlockButton.addClass('button', 'secondary')
     passwordWrap.append(passwordInput, unlockButton)
+    // Keep incorrect-password feedback in the visible password section for retry.
+    const passwordError = P('')
+    passwordError.addClass('error')
+    // Give password failures a full row beneath the input and unlock control.
+    passwordError.el.style.flexBasis = '100%'
+    passwordWrap.append(passwordError)
 
     const downloadButton = Button(t('download'))
     downloadButton.addClass('button', 'primary')
@@ -72,7 +79,6 @@ export const DownloadPage = () => {
     page.append(preferencesBar, card)
 
     let downloadPath = ''
-    let currentPassword = ''
     let currentId = ''
     let previewUrl: string | null = null
 
@@ -127,6 +133,7 @@ export const DownloadPage = () => {
         show(actions, false)
         show(error, false)
         show(passwordWrap, false)
+        show(passwordError, false)
         heading.text(t('loading'))
         meta.text('')
         resetPreview()
@@ -134,8 +141,6 @@ export const DownloadPage = () => {
         try {
             const file = await fileInfo(id, password)
             currentId = file.id
-            currentPassword = password ?? ''
-
             if (file.protected && !password) {
                 heading.text(t('protectedTitle'))
                 meta.text(t('protectedPrompt'))
@@ -143,6 +148,8 @@ export const DownloadPage = () => {
                 return
             }
 
+            // Hide password controls after the supplied password has been accepted.
+            show(passwordWrap, false)
             heading.text(file.fileName)
             const expiresAt = Number(new URLSearchParams(window.location.search).get('expires'))
             const expiryDate = new Date(expiresAt * 1000).toLocaleString(languageLocale())
@@ -152,13 +159,19 @@ export const DownloadPage = () => {
             if (password) query.set('password', password)
             else query.delete('password')
             downloadPath = `/api/files/${file.id}/download?${query.toString()}`
-            renderPreview(file, downloadPath)
+            // Preview requests get inline disposition and do not enter download logs.
+            const previewPath = `/api/files/${file.id}/preview?${query.toString()}`
+            renderPreview(file, previewPath)
             show(actions, true)
         } catch (problem) {
-            if (problem instanceof Error && problem.message.includes('password') && !password) {
+            if (problem instanceof Error && problem.message.toLowerCase().includes('password')) {
                 heading.text(t('protectedTitle'))
                 meta.text(t('protectedPrompt'))
                 show(passwordWrap, true)
+                if (password) {
+                    passwordError.text(problem.message)
+                    show(passwordError, true)
+                }
                 return
             }
 
@@ -171,16 +184,18 @@ export const DownloadPage = () => {
     // The router hands the page a fresh `enter` event every time someone
     // navigates here, with the :id from the address bar in params.
     page.on('enter', async ({ params }: IRouteEvent) => {
+        // Every viewer, including the uploader's own Open action, must unlock protected files.
         await loadFile(params.id)
     })
 
     unlockButton.on('click', async () => {
         const password = passwordInput.value().trim()
         if (!password) {
-            error.text(t('pleaseEnterPassword'))
-            show(error, true)
+            passwordError.text(t('pleaseEnterPassword'))
+            show(passwordError, true)
             return
         }
+        show(passwordError, false)
         await loadFile(currentId || (new URL(location.href).pathname.split('/').pop() ?? ''), password)
     })
 

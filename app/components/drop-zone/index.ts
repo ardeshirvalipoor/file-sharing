@@ -23,7 +23,17 @@ export const DropZone = (titleText: string, hintText: string) => {
     const hint = Span(hintText)
     hint.addClass(styles.hint)
 
+    // Keep disabled drop zones inert for file picking and drag-and-drop.
+    let disabled = false
+    const setDisabled = (value: boolean) => {
+        disabled = value
+        input.el.disabled = value
+        base.toggleClass(styles.disabled, value)
+        base.el.setAttribute('aria-disabled', String(value))
+    }
+
     input.on('change', () => {
+        if (disabled) return
         const file = input.el.files?.[0]
         if (!file) return
 
@@ -38,6 +48,7 @@ export const DropZone = (titleText: string, hintText: string) => {
     // behaviour, which is to navigate away and open the file.
     base.on('dragover', (event: DragEvent) => {
         event.preventDefault()
+        if (disabled) return
         base.addClass(styles.hot)
     })
 
@@ -46,6 +57,7 @@ export const DropZone = (titleText: string, hintText: string) => {
     base.on('drop', (event: DragEvent) => {
         event.preventDefault()
         base.removeClass(styles.hot)
+        if (disabled) return
 
         const file = event.dataTransfer?.files[0]
         if (file) base.emit('file', file)
@@ -53,5 +65,5 @@ export const DropZone = (titleText: string, hintText: string) => {
 
     base.append(input, icon, title, hint)
 
-    return base
+    return Object.assign(base, { setDisabled })
 }

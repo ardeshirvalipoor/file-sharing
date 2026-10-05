@@ -98,7 +98,7 @@ body {
     flex-direction: column;
     gap: 18px;
     width: 100%;
-    max-width: 620px;
+    max-width: 760px;
     padding: 34px;
     border: 1px solid var(--card-outline);
     border-top: 3px solid var(--accent);
@@ -148,7 +148,7 @@ body {
 
 .benefits-wrap {
     width: 100%;
-    max-width: 620px;
+    max-width: 760px;
     margin-top: 18px;
 }
 
@@ -199,7 +199,7 @@ body {
 /* Keep the site description visually secondary to the upload workflow and benefits. */
 .about-wrap {
     width: 100%;
-    max-width: 620px;
+    max-width: 760px;
     margin-top: 26px;
     padding-top: 18px;
     border-top: 1px solid var(--line);
@@ -227,7 +227,7 @@ body {
     justify-content: flex-end;
     gap: 10px;
     width: 100%;
-    max-width: 620px;
+    max-width: 760px;
     margin-bottom: 12px;
 }
 
@@ -242,6 +242,49 @@ body {
     color: var(--ink);
     font-size: 20px;
     cursor: pointer;
+}
+
+/* The QR overlay sits above the upload card so a phone user can scan the link
+   without leaving the current desktop flow and without hiding the original URL. */
+.qr-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 18, .42);
+}
+
+.qr-dialog {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: min(90vw, 320px);
+    padding: 20px 18px 18px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.qr-title {
+    margin: 0;
+    color: var(--ink);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.qr-image {
+    display: block;
+    width: min(70vw, 220px);
+    height: auto;
+    aspect-ratio: 1;
+    padding: 10px;
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .theme-toggle:hover,

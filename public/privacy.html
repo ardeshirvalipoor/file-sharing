@@ -111,8 +111,11 @@
 
         <p>Linkify is designed to keep file transfers private. Uploaded file data is stored in private object storage and is not made public.</p>
         <p>The app creates signed share links with a short expiration time. Those links are the main way anyone can access a finished file, and they are invalidated as soon as they expire.</p>
-        <p>If you enable password protection, the app stores only a hash of the password, not the plain text password itself. This helps protect the file without retaining the secret in plain view.</p>
-        <p>We do not keep a database of the file contents. We keep only the metadata needed to manage the upload and the signed link lifecycle.</p>
+        <!-- This section explains exactly which metadata and access logs persist. -->
+        <h2>Information we retain</h2>
+        <p>If you enable password protection, the app stores a hash of the password in the file's database row, not the plain text password. This hash is used to check passwords when someone opens a protected link.</p>
+        <p>We do not store file contents in the database. We do keep file metadata there, including the file identifier, name, content type, size, upload status, timestamps, password hash when set, and download count. A separate object-storage record is written for each finished upload with its identifier, name, content type, size, password-protection status, expiration time, and record time. Those metadata records are not currently deleted when the file expires.</p>
+        <p>Each download is logged with the file identifier, time, a keyed hash of the visitor's IP address, and the browser's user-agent string. These download logs and file metadata remain in the database unless they are manually removed.</p>
         <p>Because file-sharing services handle user content, you are responsible for the information you upload and share. Please do not upload personal data or sensitive documents unless you intend to share them via the selected protected link.</p>
         <a class="back" href="/">Back to the app</a>
       </div>

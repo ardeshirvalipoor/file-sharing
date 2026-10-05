@@ -41,6 +41,20 @@
     background: var(--surface);
 }
 
+/* Make the consent-gated target visibly and interactively unavailable. */
+.disabled {
+    opacity: .55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.disabled:hover,
+.disabled.hot {
+    border-color: var(--line);
+    background: var(--field-soft);
+    transform: none;
+}
+
 .title {
     font-size: 16px;
     font-weight: 600;
