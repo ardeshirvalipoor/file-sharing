@@ -14,8 +14,8 @@ import { HttpError } from './http-error'
 // secret. Without a signature, anyone could edit the size, the file name, or
 // somebody else's upload id.
 
-// Optional password protection is part of the upload state. We keep the hash in
-// the signed token so an interrupted upload can resume without exposing the secret.
+// Older signed tokens may still contain a password hash; current uploads choose
+// their password at completion and keep that hash on the file's database row.
 export interface UploadToken {
     id: string          // the share id, which is also the storage key
     uploadId: string    // the storage's own id for this multipart upload

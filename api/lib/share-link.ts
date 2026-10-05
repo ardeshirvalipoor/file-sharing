@@ -36,7 +36,7 @@ export function hashPassword(password: string): string {
 }
 
 // The browser can send a password without us ever keeping it in a readable form.
-// We only compare the hash to the stored version the upload metadata contains.
+// We compare its hash to the value stored on the file's database row.
 export function verifyPassword(password: string, expectedHash: string): boolean {
     const actualHash = hashPassword(password)
     const actualBytes = Buffer.from(actualHash)

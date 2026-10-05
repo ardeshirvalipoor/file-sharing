@@ -19,6 +19,9 @@ export const config = {
     // the service on. On Fly.io that is https://your-app.fly.dev.
     publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000',
 
+    // Supabase Postgres. See api/lib/db.ts.
+    databaseUrl: required('DATABASE_URL'),
+
     // Cloudflare R2. See api/lib/storage.ts for why the S3 words show up here.
     r2: {
         accountId: required('R2_ACCOUNT_ID'),

@@ -6,18 +6,18 @@
 
 import { MAX_FILE_SIZE, PART_SIZE, config } from '../config'
 import { newFileId, objectKey } from '../lib/file-id'
+import * as db from '../lib/db'
 import * as storage from '../lib/storage'
 import { readUploadToken, writeUploadToken } from '../lib/upload-token'
 import { HttpError } from '../lib/http-error'
 import { createShareLink, hashPassword, LinkExpiry, shareLinkExpiresAt } from '../lib/share-link'
 
-// The upload contract now accepts an optional password. The service validates it
-// early and stores only a hash instead of the plain secret.
+// Upload setup contains only file details; password protection is chosen when
+// the upload finishes so it works the same for fresh and resumed uploads.
 export interface NewUpload {
     fileName: string
     contentType: string
     size: number
-    password?: string
 }
 
 export interface StartedUpload {
@@ -33,19 +33,16 @@ export async function start(file: NewUpload): Promise<StartedUpload> {
         throw new HttpError(413, `Files can be at most ${MAX_FILE_SIZE / (1024 * 1024 * 1024)} GB`)
     }
 
-    // An optional password is accepted only when it is long enough. The service
-    // hashes it before storing anything in the bucket metadata.
-    const password = file.password?.trim()
-    if (password !== undefined && password.length > 0 && password.length < 6) {
-        throw new HttpError(400, 'Passwords must be at least 6 characters long')
-    }
-
     const id = newFileId()
-    const passwordHash = password ? hashPassword(password) : undefined
-    const uploadId = await storage.createMultipartUpload(objectKey(id), file.fileName, file.contentType, passwordHash)
+    const uploadId = await storage.createMultipartUpload(objectKey(id), file.fileName, file.contentType)
+
+    // The row goes in before anything reaches R2. If this fails, nothing was
+    // created and the person sees an error. The other order would leave parts in
+    // the bucket that no row points at, which is the one mess we cannot find later.
+    await db.insertFile(id, file)
 
     return {
-        token: writeUploadToken({ id, uploadId, passwordHash, fileName: file.fileName, contentType: file.contentType, size: file.size }),
+        token: writeUploadToken({ id, uploadId, fileName: file.fileName, contentType: file.contentType, size: file.size }),
         partSize: PART_SIZE,
         totalParts: countParts(file.size)
     }
@@ -72,7 +69,7 @@ export async function partUrl(token: string, partNumber: number): Promise<string
 }
 
 // Step four. Glue the parts together and return the link to share.
-export async function finish(token: string, expiresIn: LinkExpiry): Promise<{ id: string; url: string }> {
+export async function finish(token: string, expiresIn: LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
     const upload = readUploadToken(token)
     const key = objectKey(upload.id)
 
@@ -87,6 +84,15 @@ export async function finish(token: string, expiresIn: LinkExpiry): Promise<{ id
 
     await storage.completeMultipartUpload(key, upload.uploadId, parts)
 
+    // R2 first, then the row. If this second call fails the bytes are safe and
+    // the row is merely out of date, which can be repaired. The other order would
+    // announce a file that is not there.
+    // Store only the final password hash in the files row; a resumed upload can
+    // therefore use the password entered at the moment it is completed.
+    const passwordHash = password?.trim() ? hashPassword(password.trim()) : null
+    await db.markFileReady(upload.id, passwordHash)
+
+
     // Give the share link and its R2 cleanup marker the same expiration time.
     const expiresAt = shareLinkExpiresAt(expiresIn)
     await storage.scheduleFileDeletion({
@@ -94,7 +100,7 @@ export async function finish(token: string, expiresIn: LinkExpiry): Promise<{ id
         fileName: upload.fileName,
         contentType: upload.contentType,
         size: upload.size,
-        passwordProtected: Boolean(upload.passwordHash),
+        passwordProtected: Boolean(passwordHash),
         expiresAt,
         recordedAt: Math.floor(Date.now() / 1000)
     })
@@ -106,6 +112,7 @@ export async function finish(token: string, expiresIn: LinkExpiry): Promise<{ id
 export async function cancel(token: string): Promise<void> {
     const upload = readUploadToken(token)
     await storage.abortMultipartUpload(objectKey(upload.id), upload.uploadId)
+    await db.markFileDeleted(upload.id)
 }
 
 // Every part is PART_SIZE except the last, which holds the remainder.

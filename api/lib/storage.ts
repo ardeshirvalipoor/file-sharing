@@ -27,6 +27,7 @@ import { DOWNLOAD_URL_TTL, UPLOAD_URL_TTL, config } from '../config'
 import { isFileId, objectKey } from './file-id'
 import { MAX_LINK_LIFETIME_SECONDS } from './share-link'
 
+
 const client = new S3Client({
     // R2 has no regions, but the S3 protocol insists on the field.
     region: 'auto',
@@ -54,12 +55,7 @@ export interface StoredPart {
     size: number
 }
 
-export interface StoredFile {
-    fileName: string
-    contentType: string
-    size: number
-    passwordHash?: string
-}
+
 
 export interface RetainedFileRecord {
     id: string
@@ -73,9 +69,8 @@ export interface RetainedFileRecord {
 
 // Protected uploads keep only a password hash in the object metadata. That lets
 // the server validate a password later without saving the plain secret anywhere.
-export async function createMultipartUpload(key: string, fileName: string, contentType: string, passwordHash?: string): Promise<string> {
+export async function createMultipartUpload(key: string, fileName: string, contentType: string): Promise<string> {
     const metadata: Record<string, string> = { filename: encodeURIComponent(fileName) }
-    if (passwordHash) metadata.passwordHash = passwordHash
 
     const created = await client.send(new CreateMultipartUploadCommand({
         Bucket: config.r2.bucket,
@@ -206,42 +201,57 @@ export async function abortMultipartUpload(key: string, uploadId: string): Promi
     }))
 }
 
-// The file's name, type and size, without fetching a single byte of it.
-// Returns null when there is no such file, because a dead share link is an
-// ordinary thing to happen and not an error.
-export async function headFile(key: string): Promise<StoredFile | null> {
-    try {
-        const head = await client.send(new HeadObjectCommand({ Bucket: config.r2.bucket, Key: key }))
-        const passwordHash = head.Metadata?.passwordHash ?? head.Metadata?.passwordhash
-        return {
-            fileName: decodeURIComponent(head.Metadata?.filename ?? 'download'),
-            contentType: head.ContentType ?? 'application/octet-stream',
-            size: head.ContentLength ?? 0,
-            passwordHash
-        }
-    } catch (error) {
-        if (isMissing(error)) return null
-        throw error
-    }
-}
 
 // A URL that downloads this one file for the next few minutes. The bucket itself
 // stays private, so this is the only way in.
 export function presignDownloadUrl(key: string, fileName: string, expiresIn = DOWNLOAD_URL_TTL): Promise<string> {
+    return presignFileUrl(key, fileName, 'attachment', expiresIn)
+}
+
+// Preview URLs request inline display and are kept separate from the counted
+// download flow so opening a share page does not increment download totals.
+export function presignPreviewUrl(key: string, fileName: string, contentType: string, expiresIn = DOWNLOAD_URL_TTL): Promise<string> {
+    return presignFileUrl(key, fileName, 'inline', expiresIn, contentType)
+}
+
+// Sign the same object request with the requested browser disposition.
+function presignFileUrl(key: string, fileName: string, disposition: 'attachment' | 'inline', expiresIn: number, contentType?: string): Promise<string> {
     const command = new GetObjectCommand({
         Bucket: config.r2.bucket,
         Key: key,
-        // Without this the browser would save the file under its random storage
-        // key. This asks it to use the name the uploader chose.
-        ResponseContentDisposition: contentDisposition(fileName)
+        // Use the uploader's filename while selecting download or inline display.
+        ResponseContentDisposition: contentDisposition(fileName, disposition),
+        ...(contentType ? { ResponseContentType: contentType } : {})
     })
 
     return getSignedUrl(client, command, { expiresIn })
 }
 
-function isMissing(error: unknown): boolean {
-    const name = (error as { name?: string }).name
-    return name === 'NotFound' || name === 'NoSuchKey'
+// This reads the object metadata the browser never sees, including an optional
+// legacy password hash for files created before hashes moved to the database.
+export async function headFile(key: string): Promise<{ fileName: string; contentType: string; size: number; passwordHash?: string } | null> {
+    try {
+        const head = await client.send(new HeadObjectCommand({
+            Bucket: config.r2.bucket,
+            Key: key
+        }))
+
+        const metadata = head.Metadata ?? {}
+        const fileName = metadata.filename ? decodeURIComponent(metadata.filename) : ''
+
+        return {
+            fileName: fileName || key.replace(/^files\//, ''),
+            contentType: head.ContentType ?? 'application/octet-stream',
+            size: head.ContentLength ?? 0,
+            passwordHash: metadata.passwordHash
+        }
+    } catch (error: unknown) {
+        const status = typeof error === 'object' && error && 'name' in error ? (error as { name?: string; $metadata?: { httpStatusCode?: number } }).name : undefined
+        const httpStatus = typeof error === 'object' && error && '$metadata' in error ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode : undefined
+
+        if (status === 'NotFound' || httpStatus === 404) return null
+        throw error
+    }
 }
 
 // Order markers by expiration so the sweeper can stop at the first future deadline.
@@ -313,9 +323,9 @@ async function deleteLegacyExpiredFiles(now: number): Promise<number> {
 
 // Two spellings of the same name, as the header standard asks for. Old browsers
 // read the quoted one, everything current reads the UTF-8 one.
-function contentDisposition(fileName: string): string {
+function contentDisposition(fileName: string, disposition: 'attachment' | 'inline'): string {
     // Anything outside plain printable ASCII, plus the two characters that
     // would break out of the quotes, becomes an underscore.
     const ascii = fileName.replace(/[^\x20-\x7e]|["\\]/g, '_')
-    return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
 }
