@@ -53,6 +53,9 @@ That database is an index and nothing more. It holds one row per file and one ro
 per download. It holds no file bytes, and it holds no upload in progress. If it
 were lost tomorrow, every file would still be sitting in the bucket, whole.
 
+That database is an index and nothing more. It holds one row per file and one row
+per download. It holds no file bytes, and it holds no upload in progress. If it
+were lost tomorrow, every file would still be sitting in the bucket, whole.
 Two other things are worth pointing out in that picture.
 
 The R2 secret key sits only on our machine. It is never sent anywhere, and the
@@ -89,7 +92,10 @@ anything. It stops working after an hour.
 
 ### Downloading
 
-The share link `/f/AbC123` opens the app. Then this happens.
+The signed share link `/f/AbC123?expires=...&signature=...` opens the app. Its
+expiry is one hour, one day, or one week after upload completion. The server
+checks the signature and expiry before showing file details or issuing a
+download redirect. Then this happens.
 
 ```text
    +-----------------+                      +-----------------------------+
@@ -212,6 +218,7 @@ publishes every table through a REST API that its public key can reach, and this
 shuts that door completely, so the API can see nothing at all. Our server
 connects as the database owner, and those rules do not apply to it.
 
+
 ## Run it on your machine
 
 ```powershell
@@ -241,6 +248,7 @@ fly secrets set `
   PUBLIC_BASE_URL=https://your-app.fly.dev
 fly deploy
 ```
+Use the transaction pooler string for `DATABASE_URL` here as well.
 
 Use the transaction pooler string for `DATABASE_URL` here as well.
 

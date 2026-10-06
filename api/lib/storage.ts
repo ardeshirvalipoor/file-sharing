@@ -13,6 +13,7 @@ import {
     AbortMultipartUploadCommand,
     CompleteMultipartUploadCommand,
     CreateMultipartUploadCommand,
+    DeleteObjectCommand,
     GetObjectCommand,
     ListPartsCommand,
     S3Client,
@@ -119,15 +120,32 @@ export async function abortMultipartUpload(key: string, uploadId: string): Promi
     }))
 }
 
+// Removes a finished file for good. Deleting a file that is already gone is not
+// an error, so a cleanup that stops halfway can simply run again.
+export async function deleteFile(key: string): Promise<void> {
+    await client.send(new DeleteObjectCommand({ Bucket: config.r2.bucket, Key: key }))
+}
+
 // A URL that downloads this one file for the next few minutes. The bucket itself
 // stays private, so this is the only way in.
 export function presignDownloadUrl(key: string, fileName: string): Promise<string> {
+    return presignFileUrl(key, fileName, 'attachment')
+}
+
+// Preview URLs request inline display and are kept separate from the counted
+// download flow so opening a share page does not increment download totals.
+export function presignPreviewUrl(key: string, fileName: string, contentType: string): Promise<string> {
+    return presignFileUrl(key, fileName, 'inline', contentType)
+}
+
+// Sign the same object request with the requested browser disposition.
+function presignFileUrl(key: string, fileName: string, disposition: 'attachment' | 'inline', contentType?: string): Promise<string> {
     const command = new GetObjectCommand({
         Bucket: config.r2.bucket,
         Key: key,
-        // Without this the browser would save the file under its random storage
-        // key. This asks it to use the name the uploader chose.
-        ResponseContentDisposition: contentDisposition(fileName)
+        // Use the uploader's filename while selecting download or inline display.
+        ResponseContentDisposition: contentDisposition(fileName, disposition),
+        ...(contentType ? { ResponseContentType: contentType } : {})
     })
 
     return getSignedUrl(client, command, { expiresIn: DOWNLOAD_URL_TTL })
@@ -135,9 +153,9 @@ export function presignDownloadUrl(key: string, fileName: string): Promise<strin
 
 // Two spellings of the same name, as the header standard asks for. Old browsers
 // read the quoted one, everything current reads the UTF-8 one.
-function contentDisposition(fileName: string): string {
+function contentDisposition(fileName: string, disposition: 'attachment' | 'inline'): string {
     // Anything outside plain printable ASCII, plus the two characters that
     // would break out of the quotes, becomes an underscore.
     const ascii = fileName.replace(/[^\x20-\x7e]|["\\]/g, '_')
-    return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
 }

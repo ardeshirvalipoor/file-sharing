@@ -5,7 +5,7 @@
 import { Base, Div, Input, Span } from '@codesuma/baseline'
 import styles from './index.module.css'
 
-export const DropZone = () => {
+export const DropZone = (titleText: string, hintText: string) => {
     // A <label> wrapping a file input is the plain HTML way to make a whole area
     // open the file picker. No click handler needed.
     const base = Base('label')
@@ -17,10 +17,10 @@ export const DropZone = () => {
     const icon = Div('+')
     icon.addClass(styles.icon)
 
-    const title = Span('Choose a file or drop it here')
+    const title = Span(titleText)
     title.addClass(styles.title)
 
-    const hint = Span('Up to 1 GB. An interrupted upload picks up where it stopped.')
+    const hint = Span(hintText)
     hint.addClass(styles.hint)
 
     input.on('change', () => {

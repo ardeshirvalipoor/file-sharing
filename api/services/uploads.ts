@@ -10,7 +10,10 @@ import * as db from '../lib/db'
 import * as storage from '../lib/storage'
 import { readUploadToken, writeUploadToken } from '../lib/upload-token'
 import { HttpError } from '../lib/http-error'
+import { createShareLink, hashPassword, LinkExpiry, shareLinkExpiresAt } from '../lib/share-link'
 
+// Upload setup contains only file details; password protection is chosen when
+// the upload finishes so it works the same for fresh and resumed uploads.
 export interface NewUpload {
     fileName: string
     contentType: string
@@ -40,7 +43,7 @@ export async function start(file: NewUpload): Promise<StartedUpload> {
     const uploadId = await storage.createMultipartUpload(objectKey(id), file.fileName, file.contentType)
 
     return {
-        token: writeUploadToken({ id, uploadId, ...file }),
+        token: writeUploadToken({ id, uploadId, fileName: file.fileName, contentType: file.contentType, size: file.size }),
         partSize: PART_SIZE,
         totalParts: countParts(file.size)
     }
@@ -67,7 +70,7 @@ export async function partUrl(token: string, partNumber: number): Promise<string
 }
 
 // Step four. Glue the parts together and return the link to share.
-export async function finish(token: string): Promise<{ id: string; url: string }> {
+export async function finish(token: string, expiresIn: LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
     const upload = readUploadToken(token)
     const key = objectKey(upload.id)
 
@@ -85,9 +88,15 @@ export async function finish(token: string): Promise<{ id: string; url: string }
     // R2 first, then the row. If this second call fails the bytes are safe and
     // the row is merely out of date, which can be repaired. The other order would
     // announce a file that is not there.
-    await db.markFileReady(upload.id)
+    // Store only the final password hash in the files row; a resumed upload can
+    // therefore use the password entered at the moment it is completed.
+    // The row and the share link get the same expiry, and the cleanup reads it
+    // from the row.
+    const passwordHash = password?.trim() ? hashPassword(password.trim()) : null
+    const expiresAt = shareLinkExpiresAt(expiresIn)
+    await db.markFileReady(upload.id, passwordHash, new Date(expiresAt * 1000))
 
-    return { id: upload.id, url: `${config.publicBaseUrl}/f/${upload.id}` }
+    return { id: upload.id, url: createShareLink(upload.id, expiresIn, expiresAt) }
 }
 
 // Give up on an upload and let the storage throw away the parts it collected.

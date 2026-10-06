@@ -44,16 +44,19 @@ export async function insertFile(id: string, file: NewFile): Promise<void> {
 
 // The parts are glued together and the object is whole. Only now is there a real
 // file at this id.
-export async function markFileReady(id: string): Promise<void> {
+// Completion saves the final optional password hash and the link's expiry
+// alongside the ready status.
+export async function markFileReady(id: string, passwordHash: string | null, expiresAt: Date): Promise<void> {
     await sql`
         update files
-        set status = 'ready', completed_at = now()
+        set status = 'ready', completed_at = now(), password_hash = ${passwordHash}, expires_at = ${expiresAt}
         where id = ${id}
     `
 }
 
-// The person gave up on the upload. We keep the row rather than removing it, so
-// a link that once worked can later be told apart from one that never did.
+// The person gave up on the upload, or its link ran out and the bytes were
+// deleted. We keep the row rather than removing it, so a link that once worked
+// can later be told apart from one that never did.
 export async function markFileDeleted(id: string): Promise<void> {
     await sql`
         update files
@@ -62,11 +65,22 @@ export async function markFileDeleted(id: string): Promise<void> {
     `
 }
 
+// Files whose link has run out but whose bytes have not been deleted yet.
+export async function expiredFileIds(): Promise<string[]> {
+    const rows = await sql`
+        select id from files
+        where expires_at <= now() and deleted_at is null
+    `
+    return rows.map(row => row.id)
+}
+
 export interface FileRow {
     id: string
     fileName: string
     contentType: string
     size: number
+    // Password verification uses this hash without reading it from object storage.
+    passwordHash: string | null
 }
 
 // The one question a share link asks: is there a file at this id that somebody
@@ -74,7 +88,7 @@ export interface FileRow {
 // cancelled, both answer no, the same as an id that was never used.
 export async function findFile(id: string): Promise<FileRow | null> {
     const [row] = await sql`
-        select id, file_name, content_type, size
+        select id, file_name, content_type, size, password_hash
         from files
         where id = ${id} and status = 'ready' and deleted_at is null
     `
@@ -86,7 +100,8 @@ export async function findFile(id: string): Promise<FileRow | null> {
         id: row.id,
         fileName: row.file_name,
         contentType: row.content_type,
-        size: Number(row.size)
+        size: Number(row.size),
+        passwordHash: row.password_hash
     }
 }
 
