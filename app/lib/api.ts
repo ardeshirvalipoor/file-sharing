@@ -21,8 +21,8 @@ export interface UploadedPart {
     size: number
 }
 
-// The browser API now reports whether a file is protected and can pass an
-// optional password through the upload flow without changing the rest of the app.
+// The browser API reports whether a file is protected and accepts a password
+// when completing an upload.
 export interface FileInfo {
     id: string
     fileName: string
@@ -31,13 +31,12 @@ export interface FileInfo {
     protected: boolean
 }
 
-export async function startUpload(file: File, password?: string): Promise<StartedUpload> {
+export async function startUpload(file: File): Promise<StartedUpload> {
     return unwrap<StartedUpload>(await http.post('/api/uploads', {
         fileName: file.name,
         // An unknown type is normal for files with no extension.
         contentType: file.type || 'application/octet-stream',
-        size: file.size,
-        password
+        size: file.size
     }))
 }
 
@@ -51,18 +50,20 @@ export async function partUrl(token: string, partNumber: number): Promise<string
     return body.url
 }
 
-export async function finishUpload(token: string, expiresIn: LinkExpiry): Promise<{ id: string; url: string }> {
-    return unwrap(await http.post(`/api/uploads/${token}/complete`, { expiresIn }))
+// Completion carries the latest password choice, including when reusing a saved token.
+export async function finishUpload(token: string, expiresIn: LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
+    return unwrap(await http.post(`/api/uploads/${token}/complete`, { expiresIn, password }))
 }
 
 export async function cancelUpload(token: string): Promise<void> {
     unwrap(await http.delete(`/api/uploads/${token}`))
 }
 
-export async function fileInfo(id: string, password?: string): Promise<FileInfo> {
-    const query = new URLSearchParams(window.location.search)
+export async function fileInfo(id: string, password?: string, shareUrl?: URL): Promise<FileInfo> {
+    const query = new URLSearchParams(shareUrl?.search ?? window.location.search)
+    // Passwords must be entered in the viewer, never inherited from a copied URL.
+    query.delete('password')
     if (password) query.set('password', password)
-    else query.delete('password')
     return unwrap<FileInfo>(await http.get(`/api/files/${id}?${query.toString()}`))
 }
 

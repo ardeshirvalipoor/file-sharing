@@ -5,11 +5,13 @@
 // tells you everything about what the screen can look like.
 
 import { Base, Button, Div, H1, Input, P, Page, Span, waitFor } from '@codesuma/baseline'
+import { toDataURL } from 'qrcode'
 import { Progress } from '../../components/progress'
 import { DropZone } from '../../components/drop-zone'
 import * as api from '../../lib/api'
 import { fileSize } from '../../lib/format'
 import { discardUpload, resumableUpload, uploadFile } from '../../lib/upload'
+import { consumeUploaderPassword, storeUploaderPassword } from '../../lib/uploader-password'
 import { show } from '../../lib/show'
 import { createPreferencesBar, t, translateUploadStatus } from '../../lib/preferences'
 import styles from './index.module.css'
@@ -110,6 +112,12 @@ export const UploadPage = () => {
     passwordInput.el.setAttribute('placeholder', t('passwordPlaceholder'))
     passwordInput.el.setAttribute('aria-label', t('enterPassword'))
     passwordRow.append(passwordLabel, passwordInput)
+    // Show password validation directly below the input that needs correction.
+    const passwordError = P('')
+    passwordError.addClass('error')
+    passwordError.el.style.flexBasis = '100%'
+    passwordError.el.style.boxSizing = 'border-box'
+    passwordRow.append(passwordError)
 
     const dropZone = DropZone(t('dropTitle'), t('dropHint'))
 
@@ -135,6 +143,10 @@ export const UploadPage = () => {
     privacyLink.el.textContent = t('privacy')
     termsLabel.append(termsCheckbox, termsText, termsLink, termsAnd, privacyLink)
     termsRow.append(termsLabel)
+    // Explain that consent is required and update the note as the checkbox changes.
+    const termsHint = P(t('acceptBeforeUse'))
+    termsHint.addClass('note')
+    termsRow.append(termsHint)
 
     // The preview area shows a quick thumbnail or media snapshot for images, video,
     // and PDFs before the user shares the final link.
@@ -184,9 +196,46 @@ export const UploadPage = () => {
     const copyButton = Button(t('copy'))
     copyButton.addClass('button', 'secondary')
 
+    // Add a small action group so the finished share link can be opened in a new
+    // tab or shown as a QR code for mobile scanning without leaving the current page.
+    const openButton = Button(t('openLink'))
+    openButton.addClass('button', 'secondary')
+
+    // Open the dedicated media page without changing the share/download URL.
+    const previewButton = Button(t('preview'))
+    previewButton.addClass('button', 'secondary')
+
+    // Keep the QR action visually compact while its accessible label names the action.
+    const qrButton = Button('')
+    qrButton.addClass('button', 'secondary', styles.qrButton)
+    qrButton.el.setAttribute('aria-label', t('qrCodeTitle'))
+    qrButton.el.title = t('qrCodeTitle')
+    qrButton.el.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 3h7v7H3zM5 5v3h3V5zM14 3h7v7h-7zM16 5v3h3V5zM3 14h7v7H3zM5 16v3h3v-3z"/><path d="M13 13h3v3h-3zM18 13h3v2h-3zM17 16h2v2h-2zM13 18h2v3h-2zM16 19h2v2h-2zM20 17h1v4h-1z"/></svg>'
+
+    const shareActions = Div()
+    shareActions.addClass(styles.shareActions)
+    shareActions.append(copyButton, openButton, previewButton, qrButton)
+
     const shareRow = Div()
     shareRow.addClass(styles.shareRow)
-    shareRow.append(shareInput, copyButton)
+    shareRow.append(shareInput, shareActions)
+
+    // Keep a dedicated popup for the generated QR code so users can scan it from
+    // a phone while the desktop browser still shows the share link and controls.
+    const qrModal = Div()
+    qrModal.addClass('qr-modal', 'hidden')
+    const qrDialog = Div()
+    qrDialog.addClass('qr-dialog')
+    const qrTitle = Base('h3')
+    qrTitle.addClass('qr-title')
+    qrTitle.text(t('qrCodeTitle'))
+    const qrImage = Base('img')
+    qrImage.addClass('qr-image')
+    qrImage.el.alt = t('qrCodeTitle')
+    const qrCloseButton = Button(t('close'))
+    qrCloseButton.addClass('button', 'secondary')
+    qrDialog.append(qrTitle, qrImage, qrCloseButton)
+    qrModal.append(qrDialog)
 
     // Confirm the selected expiration beside the completed share link.
     const expirySummary = P('')
@@ -206,16 +255,71 @@ export const UploadPage = () => {
     endActions.append(retryButton, againButton)
 
     card.append(heading, intro, expiryRow, passwordRow, dropZone, previewWrap, fileRow, resumeNote, actions, termsRow, progress, status, shareRow, expirySummary, error, endActions)
-    page.append(preferencesBar, card, benefitsWrap, aboutWrap)
+    page.append(preferencesBar, card, benefitsWrap, aboutWrap, qrModal)
 
     // --- state ---------------------------------------------------------------
 
     let chosen: File | null = null
     let canResume = false
     let previewUrl: string | null = null
+    let currentShareUrl = ''
+    // Keep viewer URLs identical to the public share link.
+    function uploaderLink(value: string): URL {
+        const link = new URL(value)
+        link.searchParams.delete('password')
+        return link
+    }
+
+    // Clear any stale tab password and navigate in place; every viewer must ask for the password.
+    function openViewer(url: URL): void {
+        const match = /^\/f\/([^/]+)/.exec(url.pathname)
+        if (!match) {
+            throw new Error('The file viewer URL is not valid')
+        }
+
+        storeUploaderPassword(match[1], '')
+        window.location.href = url.toString()
+    }
+
+    // Restore the completed-upload view when returning from a file viewer.
+    page.on('enter', async () => {
+        const params = new URLSearchParams(window.location.search)
+        const completedLink = params.get('completed')
+        if (!completedLink) return
+
+        try {
+            const shareUrl = new URL(completedLink)
+            const match = /^\/f\/([^/]+)$/.exec(shareUrl.pathname)
+            if (shareUrl.origin !== window.location.origin || !match) {
+                throw new Error('The saved share link is not valid')
+            }
+
+            // Consume the restoration URL so refreshing returns to a clean upload page.
+            window.history.replaceState(null, '', '/')
+            const ownerPassword = consumeUploaderPassword(match[1]) ?? ''
+            const file = await api.fileInfo(match[1], ownerPassword || undefined, shareUrl)
+            chosen = null
+            canResume = false
+            fileName.text(file.fileName)
+            fileMeta.text(fileSize(file.size))
+            currentShareUrl = `${shareUrl.origin}${shareUrl.pathname}${shareUrl.search}`
+            shareInput.setValue(currentShareUrl)
+            expirySummary.text(t('linkExpiresAt', {
+                date: new Date(Number(shareUrl.searchParams.get('expires')) * 1000).toLocaleString()
+            }))
+            show(previewButton, true)
+            setStage('done')
+        } catch (problem) {
+            heading.text(t('nothingHere'))
+            error.text(problem instanceof Error ? problem.message : t('linkDidNotWork'))
+            setStage('failed')
+        }
+    })
 
     function updateUploadAvailability() {
         const enabled = termsCheckbox.el.checked
+        dropZone.setDisabled(!enabled)
+        show(termsHint, !enabled)
         uploadButton.el.disabled = !enabled
         uploadButton.el.setAttribute('aria-disabled', String(!enabled))
         if (!enabled) {
@@ -326,13 +430,23 @@ export const UploadPage = () => {
         }
 
         const password = passwordToggle.el.checked ? passwordInput.value().trim() : undefined
+        if (passwordToggle.el.checked && !password) {
+            passwordError.text(t('passwordRequired'))
+            show(passwordError, true)
+            return
+        }
         if (password !== undefined && password.length < 6) {
+            show(passwordError, false)
             error.text(t('passwordTooShort'))
             setStage('failed')
             return
         }
+        show(passwordError, false)
 
         const expiresIn = (expirySelect.el as HTMLSelectElement).value as api.LinkExpiry
+        // Clear any earlier result before this upload starts so actions cannot reuse a stale link.
+        currentShareUrl = ''
+        shareInput.setValue('')
         progress.reset()
         status.text(t('preparingUpload'))
         setStage('uploading')
@@ -343,7 +457,10 @@ export const UploadPage = () => {
                 onProgress: report => progress.update(report.uploadedBytes, report.totalBytes)
             }, expiresIn, password)
 
-            shareInput.setValue(finished.url)
+            currentShareUrl = finished.url
+            shareInput.setValue(currentShareUrl)
+            // Every completed upload can open its dedicated preview or download page.
+            show(previewButton, true)
             expirySummary.text(t('expirySummary', { duration: expiryChoices.find(choice => choice.value === expiresIn)?.label ?? '' }))
             canResume = false
             setStage('done')
@@ -378,33 +495,26 @@ export const UploadPage = () => {
     againButton.on('click', () => {
         chosen = null
         canResume = false
+        currentShareUrl = ''
+        shareInput.setValue('')
         passwordToggle.el.checked = false
         passwordInput.setValue('')
         termsCheckbox.el.checked = false
+        updateUploadAvailability()
+        show(qrModal, false)
         resetPreview()
         setStage('idle')
     })
 
-    // Copying a fresh share link uses the browser clipboard when available and a
-    // textarea fallback when permission is blocked. The button text changes to
-    // "Copied" to confirm the action immediately.
+    // Copying a fresh share link uses the browser clipboard, and a textarea
+    // fallback when the clipboard is missing or blocked. The button text changes
+    // to "Copied" to confirm the action immediately.
     copyButton.on('click', async () => {
-        const value = shareInput.value()
+        const value = currentShareUrl
+        if (!value) return
 
         try {
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(value)
-            } else {
-                const area = document.createElement('textarea')
-                area.value = value
-                area.setAttribute('readonly', 'true')
-                area.style.position = 'fixed'
-                area.style.left = '-9999px'
-                document.body.append(area)
-                area.select()
-                document.execCommand('copy')
-                area.remove()
-            }
+            await navigator.clipboard.writeText(value)
         } catch {
             const area = document.createElement('textarea')
             area.value = value
@@ -422,6 +532,47 @@ export const UploadPage = () => {
         copyButton.text(t('copy'))
     })
 
+    // Open the existing public share page in the reusable viewer tab.
+    openButton.on('click', () => {
+        const value = currentShareUrl
+        if (!value) return
+        try {
+            openViewer(uploaderLink(value))
+        } catch (problem) {
+            error.text(problem instanceof Error ? problem.message : t('uploadFailed'))
+            show(error, true)
+        }
+    })
+
+    // Reuse the signed share-link query while routing to the dedicated preview screen.
+    previewButton.on('click', () => {
+        const value = currentShareUrl
+        if (!value) return
+        const previewLink = uploaderLink(value)
+        previewLink.pathname = `${previewLink.pathname}/preview`
+        try {
+            openViewer(previewLink)
+        } catch (problem) {
+            error.text(problem instanceof Error ? problem.message : t('uploadFailed'))
+            show(error, true)
+        }
+    })
+
+    // The QR popup keeps mobile scanning easy without hiding the desktop share link.
+    // The code is drawn here in the browser. The share link is the key to the
+    // file, so it must never go to an outside service just to make a picture.
+    qrButton.on('click', async () => {
+        const value = currentShareUrl
+        if (!value) return
+        qrImage.el.src = await toDataURL(value, { width: 220 })
+        show(qrModal, true)
+    })
+
+    qrCloseButton.on('click', () => show(qrModal, false))
+    qrModal.el.addEventListener('click', (event) => {
+        if (event.target === qrModal.el) show(qrModal, false)
+    })
+
     termsCheckbox.el.addEventListener('change', () => {
         updateUploadAvailability()
         if (termsCheckbox.el.checked) {
@@ -432,8 +583,15 @@ export const UploadPage = () => {
 
     passwordToggle.el.addEventListener('change', () => {
         show(passwordInput, passwordToggle.el.checked)
+        show(passwordError, false)
+        if (!passwordToggle.el.checked) passwordInput.setValue('')
+    })
+    // Clear the required-password message as soon as a value is entered.
+    passwordInput.el.addEventListener('input', () => {
+        if (passwordInput.value().trim()) show(passwordError, false)
     })
     show(passwordInput, false)
+    show(passwordError, false)
     updateUploadAvailability()
     setStage('idle')
 

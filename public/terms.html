@@ -113,6 +113,10 @@
         <p>You are responsible for the files you upload and for the people you share them with. Do not upload content that violates the law, infringes on other people's rights, or contains malware or abusive material.</p>
         <p>We provide the service as-is and may suspend or remove links that abuse the platform, contain harmful content, or interfere with normal operation.</p>
         <p>Files are stored in private object storage and access is limited to short-lived signed URLs and optional password checks. Keep your share links and passwords private.</p>
+        <!-- This section lists the service records collected and their current retention behavior. -->
+        <h2>Information we retain</h2>
+        <p>For each upload, we keep the file name, content type, size, file identifier, status, and upload/completion timestamps in our database. We also write a record containing the file name, content type, size, password-protection status, link expiration time, and record time to object storage. These metadata records are not currently deleted when a file expires, so they may remain after the file itself is removed.</p>
+        <p>When someone downloads a file, we record the file identifier, download time, a keyed hash of the visitor's IP address, and their browser user-agent string. Download records and file metadata are retained in the database. Passwords themselves are not stored, but a hash is kept to verify protected links.</p>
         <p>By using Linkify, you agree to these terms and to any applicable local or regional laws governing file sharing and online services.</p>
         <a class="back" href="/">Back to the app</a>
       </div>

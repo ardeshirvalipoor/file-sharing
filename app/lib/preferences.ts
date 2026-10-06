@@ -18,6 +18,8 @@ const languages: { code: Language; name: string; locale: string }[] = [
     { code: 'ko', name: '한국어', locale: 'ko' }
 ]
 
+// These new keys cover the generated-link actions so the copy, open, and QR
+// labels stay translated consistently across every language the app supports.
 type TranslationKey =
     | 'language' | 'switchDark' | 'switchLight' | 'intro' | 'benefitsTitle'
     | 'fast' | 'fastDetail' | 'private' | 'privateDetail' | 'safe' | 'safeDetail'
@@ -26,9 +28,11 @@ type TranslationKey =
     | 'protect' | 'passwordPlaceholder' | 'agree' | 'terms' | 'and' | 'privacy'
     | 'dropTitle' | 'dropHint' | 'resumeNote' | 'upload' | 'continueUpload' | 'discard'
     | 'preparingUpload' | 'assemblingParts' | 'sendingParts' | 'continuingUpload'
-    | 'expirySummary' | 'linkExpiresAt' | 'copy' | 'copied' | 'tryAgain' | 'sendAnother'
-    | 'acceptBeforeSelect' | 'acceptBeforeUpload' | 'tooLarge' | 'passwordTooShort' | 'uploadFailed'
-    | 'loading' | 'protectedTitle' | 'protectedPrompt' | 'enterPassword' | 'unlock' | 'download'
+    | 'expirySummary' | 'linkExpiresAt' | 'copy' | 'copied' | 'openLink' | 'qrCode' | 'qrCodeTitle' | 'close' | 'tryAgain' | 'sendAnother'
+    // These messages explain the consent gate and required upload password.
+    | 'acceptBeforeSelect' | 'acceptBeforeUpload' | 'acceptBeforeUse' | 'passwordRequired' | 'tooLarge' | 'passwordTooShort' | 'uploadFailed'
+    // Dedicated preview actions keep their labels consistent across locales.
+    | 'loading' | 'protectedTitle' | 'protectedPrompt' | 'enterPassword' | 'unlock' | 'download' | 'preview' | 'backToShare' | 'previewUnavailable'
     | 'nothingHere' | 'linkDidNotWork' | 'pleaseEnterPassword' | 'missingTitle' | 'missingIntro' | 'sendFile'
 
 type Dictionary = Record<TranslationKey, string>
@@ -49,12 +53,14 @@ const translations: Partial<Record<Language, Dictionary>> = {
         upload: 'Upload', continueUpload: 'Continue upload', discard: 'Start fresh', preparingUpload: 'Preparing the upload',
         assemblingParts: 'Putting the parts together', sendingParts: 'Sending {missing} of {total} parts',
         continuingUpload: 'Continuing an earlier upload, {sent} of {total} parts already sent',
-        expirySummary: 'This link expires in {duration}.', linkExpiresAt: 'Link expires {date}', copy: 'Copy', copied: 'Copied', tryAgain: 'Try again', sendAnother: 'Send another file',
+        expirySummary: 'This link expires in {duration}.', linkExpiresAt: 'Link expires {date}', copy: 'Copy', copied: 'Copied', openLink: 'Open', qrCode: 'QR', qrCodeTitle: 'Scan this QR code', close: 'Close', tryAgain: 'Try again', sendAnother: 'Send another file',
         acceptBeforeSelect: 'Please accept the Terms of Service and Privacy Policy before selecting a file.',
         acceptBeforeUpload: 'Please accept the Terms of Service and Privacy Policy before uploading.',
+        acceptBeforeUse: 'Check the box above to use this tool.',
+        passwordRequired: 'The password is empty. Please enter a password.',
         tooLarge: '{name} is {size}. The limit is 1 GB.', passwordTooShort: 'Passwords must be at least 6 characters long.', uploadFailed: 'The upload failed',
         loading: 'Loading', protectedTitle: 'Protected file', protectedPrompt: 'Enter the password to preview and download this file.',
-        enterPassword: 'Password', unlock: 'Unlock', download: 'Download', nothingHere: 'Nothing here', linkDidNotWork: 'This link did not work',
+        enterPassword: 'Password', unlock: 'Unlock', download: 'Download', preview: 'Preview', backToShare: 'Back to share link', previewUnavailable: 'Your browser cannot preview this file type. Use Download to open it.', nothingHere: 'Nothing here', linkDidNotWork: 'This link did not work',
         pleaseEnterPassword: 'Please enter the password for this file.', missingTitle: 'Nothing at this address',
         missingIntro: 'The link may have been mistyped, or the file it pointed at is gone.', sendFile: 'Send a file'
     },
@@ -73,12 +79,14 @@ const translations: Partial<Record<Language, Dictionary>> = {
         upload: 'Subir', continueUpload: 'Continuar carga', discard: 'Empezar de nuevo', preparingUpload: 'Preparando la carga',
         assemblingParts: 'Uniendo las partes', sendingParts: 'Enviando {missing} de {total} partes',
         continuingUpload: 'Continuando una carga anterior: {sent} de {total} partes enviadas',
-        expirySummary: 'Este enlace caduca en {duration}.', linkExpiresAt: 'El enlace caduca el {date}', copy: 'Copiar', copied: 'Copiado', tryAgain: 'Reintentar', sendAnother: 'Enviar otro archivo',
+        expirySummary: 'Este enlace caduca en {duration}.', linkExpiresAt: 'El enlace caduca el {date}', copy: 'Copiar', copied: 'Copiado', openLink: 'Abrir', qrCode: 'QR', qrCodeTitle: 'Escanea este código QR', close: 'Cerrar', tryAgain: 'Reintentar', sendAnother: 'Enviar otro archivo',
         acceptBeforeSelect: 'Acepta los Términos del servicio y la Política de privacidad antes de elegir un archivo.',
         acceptBeforeUpload: 'Acepta los Términos del servicio y la Política de privacidad antes de subir.',
+        acceptBeforeUse: 'Marca la casilla de arriba para usar esta herramienta.',
+        passwordRequired: 'La contraseña está vacía. Introduce una contraseña.',
         tooLarge: '{name} ocupa {size}. El límite es 1 GB.', passwordTooShort: 'La contraseña debe tener al menos 6 caracteres.', uploadFailed: 'La carga ha fallado',
         loading: 'Cargando', protectedTitle: 'Archivo protegido', protectedPrompt: 'Introduce la contraseña para previsualizar y descargar este archivo.',
-        enterPassword: 'Contraseña', unlock: 'Desbloquear', download: 'Descargar', nothingHere: 'No hay nada aquí', linkDidNotWork: 'Este enlace no funciona',
+        enterPassword: 'Contraseña', unlock: 'Desbloquear', download: 'Descargar', preview: 'Vista previa', backToShare: 'Volver al enlace compartido', previewUnavailable: 'El navegador no puede previsualizar este tipo de archivo. Usa Descargar para abrirlo.', nothingHere: 'No hay nada aquí', linkDidNotWork: 'Este enlace no funciona',
         pleaseEnterPassword: 'Introduce la contraseña de este archivo.', missingTitle: 'No hay nada en esta dirección',
         missingIntro: 'Puede que el enlace esté mal escrito o que el archivo ya no exista.', sendFile: 'Enviar un archivo'
     },
@@ -97,12 +105,14 @@ const translations: Partial<Record<Language, Dictionary>> = {
         upload: 'Envoyer', continueUpload: 'Reprendre l’envoi', discard: 'Recommencer', preparingUpload: 'Préparation du transfert',
         assemblingParts: 'Assemblage des parties', sendingParts: 'Envoi de {missing} sur {total} parties',
         continuingUpload: 'Reprise du transfert : {sent} parties sur {total} déjà envoyées',
-        expirySummary: 'Ce lien expire dans {duration}.', linkExpiresAt: 'Le lien expire le {date}', copy: 'Copier', copied: 'Copié', tryAgain: 'Réessayer', sendAnother: 'Envoyer un autre fichier',
+        expirySummary: 'Ce lien expire dans {duration}.', linkExpiresAt: 'Le lien expire le {date}', copy: 'Copier', copied: 'Copié', openLink: 'Ouvrir', qrCode: 'QR', qrCodeTitle: 'Scannez ce code QR', close: 'Fermer', tryAgain: 'Réessayer', sendAnother: 'Envoyer un autre fichier',
         acceptBeforeSelect: 'Acceptez les Conditions d’utilisation et la Politique de confidentialité avant de choisir un fichier.',
         acceptBeforeUpload: 'Acceptez les Conditions d’utilisation et la Politique de confidentialité avant l’envoi.',
+        acceptBeforeUse: 'Cochez la case ci-dessus pour utiliser cet outil.',
+        passwordRequired: 'Le mot de passe est vide. Veuillez en saisir un.',
         tooLarge: '{name} fait {size}. La limite est de 1 Go.', passwordTooShort: 'Le mot de passe doit contenir au moins 6 caractères.', uploadFailed: 'Échec du transfert',
         loading: 'Chargement', protectedTitle: 'Fichier protégé', protectedPrompt: 'Saisissez le mot de passe pour prévisualiser et télécharger ce fichier.',
-        enterPassword: 'Mot de passe', unlock: 'Déverrouiller', download: 'Télécharger', nothingHere: 'Rien ici', linkDidNotWork: 'Ce lien ne fonctionne pas',
+        enterPassword: 'Mot de passe', unlock: 'Déverrouiller', download: 'Télécharger', preview: 'Aperçu', backToShare: 'Retour au lien de partage', previewUnavailable: 'Votre navigateur ne peut pas prévisualiser ce type de fichier. Utilisez Télécharger pour l’ouvrir.', nothingHere: 'Rien ici', linkDidNotWork: 'Ce lien ne fonctionne pas',
         pleaseEnterPassword: 'Saisissez le mot de passe de ce fichier.', missingTitle: 'Aucun contenu à cette adresse',
         missingIntro: 'Le lien est peut-être incorrect ou le fichier a été supprimé.', sendFile: 'Envoyer un fichier'
     },
@@ -121,12 +131,14 @@ const translations: Partial<Record<Language, Dictionary>> = {
         upload: 'Hochladen', continueUpload: 'Upload fortsetzen', discard: 'Neu beginnen', preparingUpload: 'Upload wird vorbereitet',
         assemblingParts: 'Dateiteile werden zusammengesetzt', sendingParts: '{missing} von {total} Teilen werden gesendet',
         continuingUpload: 'Vorheriger Upload wird fortgesetzt: {sent} von {total} Teilen bereits gesendet',
-        expirySummary: 'Dieser Link läuft in {duration} ab.', linkExpiresAt: 'Link läuft ab am {date}', copy: 'Kopieren', copied: 'Kopiert', tryAgain: 'Erneut versuchen', sendAnother: 'Weitere Datei senden',
+        expirySummary: 'Dieser Link läuft in {duration} ab.', linkExpiresAt: 'Link läuft ab am {date}', copy: 'Kopieren', copied: 'Kopiert', openLink: 'Öffnen', qrCode: 'QR', qrCodeTitle: 'Scanne diesen QR-Code', close: 'Schließen', tryAgain: 'Erneut versuchen', sendAnother: 'Weitere Datei senden',
         acceptBeforeSelect: 'Stimme den Nutzungsbedingungen und der Datenschutzerklärung zu, bevor du eine Datei auswählst.',
         acceptBeforeUpload: 'Stimme den Nutzungsbedingungen und der Datenschutzerklärung zu, bevor du Dateien hochlädst.',
+        acceptBeforeUse: 'Aktiviere das Kontrollkästchen oben, um dieses Tool zu verwenden.',
+        passwordRequired: 'Das Passwort ist leer. Bitte gib ein Passwort ein.',
         tooLarge: '{name} ist {size} groß. Das Limit beträgt 1 GB.', passwordTooShort: 'Das Passwort muss mindestens 6 Zeichen lang sein.', uploadFailed: 'Upload fehlgeschlagen',
         loading: 'Wird geladen', protectedTitle: 'Geschützte Datei', protectedPrompt: 'Gib das Passwort ein, um die Datei anzusehen und herunterzuladen.',
-        enterPassword: 'Passwort', unlock: 'Entsperren', download: 'Herunterladen', nothingHere: 'Hier ist nichts', linkDidNotWork: 'Dieser Link funktioniert nicht',
+        enterPassword: 'Passwort', unlock: 'Entsperren', download: 'Herunterladen', preview: 'Vorschau', backToShare: 'Zurück zum Freigabelink', previewUnavailable: 'Dieser Dateityp kann im Browser nicht angezeigt werden. Öffnen Sie ihn über Herunterladen.', nothingHere: 'Hier ist nichts', linkDidNotWork: 'Dieser Link funktioniert nicht',
         pleaseEnterPassword: 'Gib das Passwort für diese Datei ein.', missingTitle: 'Unter dieser Adresse nichts gefunden',
         missingIntro: 'Der Link ist möglicherweise falsch oder die Datei wurde entfernt.', sendFile: 'Datei senden'
     },
@@ -145,12 +157,14 @@ const translations: Partial<Record<Language, Dictionary>> = {
         upload: 'رفع', continueUpload: 'متابعة الرفع', discard: 'البدء من جديد', preparingUpload: 'جارٍ إعداد الرفع',
         assemblingParts: 'جارٍ تجميع الأجزاء', sendingParts: 'جارٍ إرسال {missing} من {total} أجزاء',
         continuingUpload: 'استئناف رفع سابق، تم إرسال {sent} من {total} أجزاء',
-        expirySummary: 'تنتهي صلاحية هذا الرابط خلال {duration}.', linkExpiresAt: 'تنتهي صلاحية الرابط في {date}', copy: 'نسخ', copied: 'تم النسخ', tryAgain: 'حاول مجددًا', sendAnother: 'إرسال ملف آخر',
+        expirySummary: 'تنتهي صلاحية هذا الرابط خلال {duration}.', linkExpiresAt: 'تنتهي صلاحية الرابط في {date}', copy: 'نسخ', copied: 'تم النسخ', openLink: 'فتح', qrCode: 'رمز QR', qrCodeTitle: 'امسح رمز الاستجابة السريعة هذا', close: 'إغلاق', tryAgain: 'حاول مجددًا', sendAnother: 'إرسال ملف آخر',
         acceptBeforeSelect: 'يرجى الموافقة على شروط الخدمة وسياسة الخصوصية قبل اختيار ملف.',
         acceptBeforeUpload: 'يرجى الموافقة على شروط الخدمة وسياسة الخصوصية قبل رفع الملف.',
+        acceptBeforeUse: 'حدد المربع أعلاه لاستخدام هذه الأداة.',
+        passwordRequired: 'كلمة المرور فارغة. يرجى إدخال كلمة مرور.',
         tooLarge: 'حجم {name} هو {size}. الحد الأقصى 1 غيغابايت.', passwordTooShort: 'يجب ألا تقل كلمة المرور عن 6 أحرف.', uploadFailed: 'تعذر رفع الملف',
         loading: 'جارٍ التحميل', protectedTitle: 'ملف محمي', protectedPrompt: 'أدخل كلمة المرور لمعاينة هذا الملف وتنزيله.',
-        enterPassword: 'كلمة المرور', unlock: 'فتح القفل', download: 'تنزيل', nothingHere: 'لا يوجد شيء هنا', linkDidNotWork: 'هذا الرابط لا يعمل',
+        enterPassword: 'كلمة المرور', unlock: 'فتح القفل', download: 'تنزيل', preview: 'معاينة', backToShare: 'العودة إلى رابط المشاركة', previewUnavailable: 'لا يمكن للمتصفح معاينة هذا النوع من الملفات. استخدم زر التنزيل لفتحه.', nothingHere: 'لا يوجد شيء هنا', linkDidNotWork: 'هذا الرابط لا يعمل',
         pleaseEnterPassword: 'أدخل كلمة مرور هذا الملف.', missingTitle: 'لا يوجد شيء في هذا العنوان',
         missingIntro: 'قد يكون الرابط مكتوبًا بشكل خاطئ أو ربما حُذف الملف.', sendFile: 'إرسال ملف'
     },
@@ -169,12 +183,14 @@ const translations: Partial<Record<Language, Dictionary>> = {
         upload: 'अपलोड करें', continueUpload: 'अपलोड जारी रखें', discard: 'फिर से शुरू करें', preparingUpload: 'अपलोड तैयार हो रहा है',
         assemblingParts: 'फ़ाइल के हिस्से जोड़े जा रहे हैं', sendingParts: '{total} में से {missing} हिस्से भेजे जा रहे हैं',
         continuingUpload: 'पिछला अपलोड जारी है, {total} में से {sent} हिस्से भेजे जा चुके हैं',
-        expirySummary: 'यह लिंक {duration} में समाप्त होगा।', linkExpiresAt: 'लिंक की समय सीमा {date} है', copy: 'कॉपी करें', copied: 'कॉपी हो गया', tryAgain: 'फिर कोशिश करें', sendAnother: 'दूसरी फ़ाइल भेजें',
+        expirySummary: 'यह लिंक {duration} में समाप्त होगा।', linkExpiresAt: 'लिंक की समय सीमा {date} है', copy: 'कॉपी करें', copied: 'कॉपी हो गया', openLink: 'खोलें', qrCode: 'QR', qrCodeTitle: 'इस QR कोड को स्कैन करें', close: 'बंद करें', tryAgain: 'फिर कोशिश करें', sendAnother: 'दूसरी फ़ाइल भेजें',
         acceptBeforeSelect: 'फ़ाइल चुनने से पहले सेवा की शर्तें और गोपनीयता नीति स्वीकार करें।',
         acceptBeforeUpload: 'अपलोड से पहले सेवा की शर्तें और गोपनीयता नीति स्वीकार करें।',
+        acceptBeforeUse: 'इस टूल का उपयोग करने के लिए ऊपर वाला बॉक्स चेक करें।',
+        passwordRequired: 'पासवर्ड खाली है। कृपया पासवर्ड दर्ज करें।',
         tooLarge: '{name} का आकार {size} है। अधिकतम सीमा 1 GB है।', passwordTooShort: 'पासवर्ड कम से कम 6 अक्षरों का होना चाहिए।', uploadFailed: 'अपलोड विफल हुआ',
         loading: 'लोड हो रहा है', protectedTitle: 'सुरक्षित फ़ाइल', protectedPrompt: 'फ़ाइल देखने और डाउनलोड करने के लिए पासवर्ड दर्ज करें।',
-        enterPassword: 'पासवर्ड', unlock: 'अनलॉक करें', download: 'डाउनलोड करें', nothingHere: 'यहाँ कुछ नहीं है', linkDidNotWork: 'यह लिंक काम नहीं किया',
+        enterPassword: 'पासवर्ड', unlock: 'अनलॉक करें', download: 'डाउनलोड करें', preview: 'पूर्वावलोकन', backToShare: 'शेयर लिंक पर वापस जाएँ', previewUnavailable: 'आपका ब्राउज़र इस फ़ाइल प्रकार का पूर्वावलोकन नहीं कर सकता। इसे खोलने के लिए डाउनलोड करें।', nothingHere: 'यहाँ कुछ नहीं है', linkDidNotWork: 'यह लिंक काम नहीं किया',
         pleaseEnterPassword: 'इस फ़ाइल का पासवर्ड दर्ज करें।', missingTitle: 'इस पते पर कुछ नहीं मिला',
         missingIntro: 'लिंक गलत हो सकता है या फ़ाइल हटाई जा चुकी है।', sendFile: 'फ़ाइल भेजें'
     },
@@ -193,12 +209,14 @@ const translations: Partial<Record<Language, Dictionary>> = {
         upload: '上传', continueUpload: '继续上传', discard: '重新开始', preparingUpload: '正在准备上传',
         assemblingParts: '正在合并文件分块', sendingParts: '正在发送 {total} 个分块中的 {missing} 个',
         continuingUpload: '继续之前的上传，已发送 {total} 个分块中的 {sent} 个',
-        expirySummary: '此链接将在 {duration} 后过期。', linkExpiresAt: '链接过期时间：{date}', copy: '复制', copied: '已复制', tryAgain: '重试', sendAnother: '发送其他文件',
+        expirySummary: '此链接将在 {duration} 后过期。', linkExpiresAt: '链接过期时间：{date}', copy: '复制', copied: '已复制', openLink: '打开', qrCode: '二维码', qrCodeTitle: '扫描此二维码', close: '关闭', tryAgain: '重试', sendAnother: '发送其他文件',
         acceptBeforeSelect: '选择文件前，请先同意服务条款和隐私政策。',
         acceptBeforeUpload: '上传前，请先同意服务条款和隐私政策。',
+        acceptBeforeUse: '请勾选上方方框以使用此工具。',
+        passwordRequired: '密码为空。请输入密码。',
         tooLarge: '{name} 大小为 {size}，上限为 1 GB。', passwordTooShort: '密码至少需要 6 个字符。', uploadFailed: '上传失败',
         loading: '正在加载', protectedTitle: '受保护的文件', protectedPrompt: '请输入密码以预览并下载此文件。',
-        enterPassword: '密码', unlock: '解锁', download: '下载', nothingHere: '这里没有内容', linkDidNotWork: '此链接无法使用',
+        enterPassword: '密码', unlock: '解锁', download: '下载', preview: '预览', backToShare: '返回分享链接', previewUnavailable: '浏览器无法预览此文件类型。请使用“下载”打开。', nothingHere: '这里没有内容', linkDidNotWork: '此链接无法使用',
         pleaseEnterPassword: '请输入此文件的密码。', missingTitle: '此地址没有内容',
         missingIntro: '链接可能输入错误，或它指向的文件已不存在。', sendFile: '发送文件'
     }
@@ -221,12 +239,14 @@ translations.tr = {
     assemblingParts: 'Dosya parçaları birleştiriliyor', sendingParts: '{total} parçanın {missing} tanesi gönderiliyor',
     continuingUpload: 'Önceki yükleme sürüyor; {total} parçanın {sent} tanesi gönderilmiş',
     expirySummary: 'Bu bağlantının süresi {duration} içinde dolacak.', linkExpiresAt: 'Bağlantı sona erme tarihi: {date}',
-    copy: 'Kopyala', copied: 'Kopyalandı', tryAgain: 'Yeniden dene', sendAnother: 'Başka dosya gönder',
+    copy: 'Kopyala', copied: 'Kopyalandı', openLink: 'Aç', qrCode: 'QR', qrCodeTitle: 'Bu QR kodunu tarat', close: 'Kapat', tryAgain: 'Yeniden dene', sendAnother: 'Başka dosya gönder',
     acceptBeforeSelect: 'Dosya seçmeden önce Hizmet Koşulları ve Gizlilik Politikası’nı kabul edin.',
     acceptBeforeUpload: 'Yüklemeden önce Hizmet Koşulları ve Gizlilik Politikası’nı kabul edin.',
+    acceptBeforeUse: 'Bu aracı kullanmak için yukarıdaki kutuyu işaretleyin.',
+    passwordRequired: 'Parola boş. Lütfen bir parola girin.',
     tooLarge: '{name} dosyası {size}. Sınır 1 GB.', passwordTooShort: 'Parola en az 6 karakter olmalıdır.', uploadFailed: 'Yükleme başarısız oldu',
     loading: 'Yükleniyor', protectedTitle: 'Korumalı dosya', protectedPrompt: 'Dosyayı önizlemek ve indirmek için parolayı girin.',
-    enterPassword: 'Parola', unlock: 'Kilidi aç', download: 'İndir', nothingHere: 'Burada bir şey yok', linkDidNotWork: 'Bu bağlantı çalışmadı',
+    enterPassword: 'Parola', unlock: 'Kilidi aç', download: 'İndir', preview: 'Önizleme', backToShare: 'Paylaşım bağlantısına dön', previewUnavailable: 'Tarayıcınız bu dosya türünü önizleyemiyor. Açmak için İndir seçeneğini kullanın.', nothingHere: 'Burada bir şey yok', linkDidNotWork: 'Bu bağlantı çalışmadı',
     pleaseEnterPassword: 'Bu dosyanın parolasını girin.', missingTitle: 'Bu adreste bir şey yok',
     missingIntro: 'Bağlantı yanlış yazılmış olabilir veya işaret ettiği dosya kaldırılmıştır.', sendFile: 'Dosya gönder'
 }
@@ -247,12 +267,14 @@ translations.ja = {
     assemblingParts: 'ファイルを結合中', sendingParts: '{total} 個中 {missing} 個のパーツを送信中',
     continuingUpload: '前回のアップロードを再開中：{total} 個中 {sent} 個を送信済み',
     expirySummary: 'このリンクは {duration} 後に期限切れになります。', linkExpiresAt: 'リンクの有効期限：{date}',
-    copy: 'コピー', copied: 'コピーしました', tryAgain: '再試行', sendAnother: '別のファイルを送信',
+    copy: 'コピー', copied: 'コピーしました', openLink: '開く', qrCode: 'QR', qrCodeTitle: 'このQRコードをスキャン', close: '閉じる', tryAgain: '再試行', sendAnother: '別のファイルを送信',
     acceptBeforeSelect: 'ファイルを選択する前に利用規約とプライバシーポリシーに同意してください。',
     acceptBeforeUpload: 'アップロードする前に利用規約とプライバシーポリシーに同意してください。',
+    acceptBeforeUse: 'このツールを使うには、上のチェックボックスをオンにしてください。',
+    passwordRequired: 'パスワードが空です。入力してください。',
     tooLarge: '{name} のサイズは {size} です。上限は 1 GB です。', passwordTooShort: 'パスワードは 6 文字以上にしてください。', uploadFailed: 'アップロードに失敗しました',
     loading: '読み込み中', protectedTitle: '保護されたファイル', protectedPrompt: 'プレビューとダウンロードにはパスワードを入力してください。',
-    enterPassword: 'パスワード', unlock: 'ロック解除', download: 'ダウンロード', nothingHere: 'ファイルがありません', linkDidNotWork: 'このリンクは利用できません',
+    enterPassword: 'パスワード', unlock: 'ロック解除', download: 'ダウンロード', preview: 'プレビュー', backToShare: '共有リンクに戻る', previewUnavailable: 'このファイル形式はブラウザーでプレビューできません。ダウンロードして開いてください。', nothingHere: 'ファイルがありません', linkDidNotWork: 'このリンクは利用できません',
     pleaseEnterPassword: 'このファイルのパスワードを入力してください。', missingTitle: 'このアドレスにページはありません',
     missingIntro: 'リンクが間違っているか、ファイルが削除された可能性があります。', sendFile: 'ファイルを送信'
 }
@@ -273,12 +295,14 @@ translations.ru = {
     assemblingParts: 'Сборка частей файла', sendingParts: 'Отправка частей: {missing} из {total}',
     continuingUpload: 'Продолжение загрузки: отправлено {sent} из {total} частей',
     expirySummary: 'Срок действия ссылки истечёт через {duration}.', linkExpiresAt: 'Ссылка истекает: {date}',
-    copy: 'Копировать', copied: 'Скопировано', tryAgain: 'Повторить', sendAnother: 'Отправить другой файл',
+    copy: 'Копировать', copied: 'Скопировано', openLink: 'Открыть', qrCode: 'QR', qrCodeTitle: 'Отсканируйте этот QR-код', close: 'Закрыть', tryAgain: 'Повторить', sendAnother: 'Отправить другой файл',
     acceptBeforeSelect: 'Перед выбором файла примите Условия использования и Политику конфиденциальности.',
     acceptBeforeUpload: 'Перед загрузкой примите Условия использования и Политику конфиденциальности.',
+    acceptBeforeUse: 'Чтобы использовать инструмент, отметьте поле выше.',
+    passwordRequired: 'Пароль не указан. Введите пароль.',
     tooLarge: 'Размер файла {name} — {size}. Максимум — 1 ГБ.', passwordTooShort: 'Пароль должен содержать не менее 6 символов.', uploadFailed: 'Не удалось загрузить файл',
     loading: 'Загрузка', protectedTitle: 'Защищённый файл', protectedPrompt: 'Введите пароль, чтобы просмотреть и скачать файл.',
-    enterPassword: 'Пароль', unlock: 'Разблокировать', download: 'Скачать', nothingHere: 'Здесь ничего нет', linkDidNotWork: 'Ссылка не работает',
+    enterPassword: 'Пароль', unlock: 'Разблокировать', download: 'Скачать', preview: 'Предпросмотр', backToShare: 'Вернуться к ссылке', previewUnavailable: 'Браузер не может показать этот тип файла. Нажмите «Скачать», чтобы открыть его.', nothingHere: 'Здесь ничего нет', linkDidNotWork: 'Ссылка не работает',
     pleaseEnterPassword: 'Введите пароль для этого файла.', missingTitle: 'По этому адресу ничего нет',
     missingIntro: 'Возможно, ссылка указана неверно или файл удалён.', sendFile: 'Отправить файл'
 }
@@ -299,12 +323,14 @@ translations.pt = {
     assemblingParts: 'A juntar as partes', sendingParts: 'A enviar {missing} de {total} partes',
     continuingUpload: 'A continuar o carregamento anterior: {sent} de {total} partes enviadas',
     expirySummary: 'Esta ligação expira em {duration}.', linkExpiresAt: 'A ligação expira em {date}',
-    copy: 'Copiar', copied: 'Copiado', tryAgain: 'Tentar novamente', sendAnother: 'Enviar outro ficheiro',
+    copy: 'Copiar', copied: 'Copiado', openLink: 'Abrir', qrCode: 'QR', qrCodeTitle: 'Digitalize este código QR', close: 'Fechar', tryAgain: 'Tentar novamente', sendAnother: 'Enviar outro ficheiro',
     acceptBeforeSelect: 'Aceite os Termos de Serviço e a Política de Privacidade antes de escolher um ficheiro.',
     acceptBeforeUpload: 'Aceite os Termos de Serviço e a Política de Privacidade antes de carregar.',
+    acceptBeforeUse: 'Marque a caixa acima para usar esta ferramenta.',
+    passwordRequired: 'A palavra-passe está vazia. Introduza uma palavra-passe.',
     tooLarge: '{name} tem {size}. O limite é 1 GB.', passwordTooShort: 'A palavra-passe deve ter pelo menos 6 caracteres.', uploadFailed: 'O carregamento falhou',
     loading: 'A carregar', protectedTitle: 'Ficheiro protegido', protectedPrompt: 'Introduza a palavra-passe para pré-visualizar e transferir este ficheiro.',
-    enterPassword: 'Palavra-passe', unlock: 'Desbloquear', download: 'Transferir', nothingHere: 'Não há nada aqui', linkDidNotWork: 'Esta ligação não funcionou',
+    enterPassword: 'Palavra-passe', unlock: 'Desbloquear', download: 'Transferir', preview: 'Pré-visualizar', backToShare: 'Voltar à ligação partilhada', previewUnavailable: 'O navegador não consegue pré-visualizar este tipo de ficheiro. Use Transferir para o abrir.', nothingHere: 'Não há nada aqui', linkDidNotWork: 'Esta ligação não funcionou',
     pleaseEnterPassword: 'Introduza a palavra-passe deste ficheiro.', missingTitle: 'Não existe nada neste endereço',
     missingIntro: 'A ligação pode estar incorreta ou o ficheiro já não existe.', sendFile: 'Enviar um ficheiro'
 }
@@ -325,12 +351,14 @@ translations.ko = {
     assemblingParts: '파일 조각을 합치는 중', sendingParts: '{total}개 중 {missing}개 조각 전송 중',
     continuingUpload: '이전 업로드 계속 진행 중, {total}개 중 {sent}개 전송 완료',
     expirySummary: '이 링크는 {duration} 후 만료됩니다.', linkExpiresAt: '링크 만료 시간: {date}',
-    copy: '복사', copied: '복사됨', tryAgain: '다시 시도', sendAnother: '다른 파일 보내기',
+    copy: '복사', copied: '복사됨', openLink: '열기', qrCode: 'QR', qrCodeTitle: '이 QR 코드를 스캔하세요', close: '닫기', tryAgain: '다시 시도', sendAnother: '다른 파일 보내기',
     acceptBeforeSelect: '파일을 선택하기 전에 서비스 약관과 개인정보 처리방침에 동의해 주세요.',
     acceptBeforeUpload: '업로드하기 전에 서비스 약관과 개인정보 처리방침에 동의해 주세요.',
+    acceptBeforeUse: '이 도구를 사용하려면 위의 체크박스를 선택하세요.',
+    passwordRequired: '비밀번호가 비어 있습니다. 비밀번호를 입력하세요.',
     tooLarge: '{name} 크기는 {size}입니다. 최대 크기는 1GB입니다.', passwordTooShort: '비밀번호는 6자 이상이어야 합니다.', uploadFailed: '업로드에 실패했습니다',
     loading: '불러오는 중', protectedTitle: '보호된 파일', protectedPrompt: '파일을 미리 보고 다운로드하려면 비밀번호를 입력하세요.',
-    enterPassword: '비밀번호', unlock: '잠금 해제', download: '다운로드', nothingHere: '항목이 없습니다', linkDidNotWork: '이 링크를 사용할 수 없습니다',
+    enterPassword: '비밀번호', unlock: '잠금 해제', download: '다운로드', preview: '미리보기', backToShare: '공유 링크로 돌아가기', previewUnavailable: '브라우저에서 이 파일 형식을 미리 볼 수 없습니다. 다운로드하여 여세요.', nothingHere: '항목이 없습니다', linkDidNotWork: '이 링크를 사용할 수 없습니다',
     pleaseEnterPassword: '이 파일의 비밀번호를 입력하세요.', missingTitle: '이 주소에 페이지가 없습니다',
     missingIntro: '링크가 잘못되었거나 파일이 삭제되었을 수 있습니다.', sendFile: '파일 보내기'
 }

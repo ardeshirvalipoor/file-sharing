@@ -52,10 +52,6 @@ What it has now is a database beside it.
 That database is an index and nothing more. It holds one row per file and one row
 per download. It holds no file bytes, and it holds no upload in progress. If it
 were lost tomorrow, every file would still be sitting in the bucket, whole.
-
-That database is an index and nothing more. It holds one row per file and one row
-per download. It holds no file bytes, and it holds no upload in progress. If it
-were lost tomorrow, every file would still be sitting in the bucket, whole.
 Two other things are worth pointing out in that picture.
 
 The R2 secret key sits only on our machine. It is never sent anywhere, and the
@@ -224,7 +220,7 @@ connects as the database owner, and those rules do not apply to it.
 ```powershell
 npm install
 copy .env.example .env
-# fill in the R2 and database values in .env
+#  fill in the R2 and database values in .env 
 npm run dev
 ```
 
@@ -248,8 +244,6 @@ fly secrets set `
   PUBLIC_BASE_URL=https://your-app.fly.dev
 fly deploy
 ```
-Use the transaction pooler string for `DATABASE_URL` here as well.
-
 Use the transaction pooler string for `DATABASE_URL` here as well.
 
 Add your Fly address to the bucket's CORS rule as well, or uploads will work on

@@ -9,6 +9,7 @@ import { ready } from './lib/upload-store'
 import { initializePreferences } from './lib/preferences'
 import { DownloadPage } from './pages/download'
 import { MissingPage } from './pages/missing'
+import { PreviewPage } from './pages/preview'
 import { UploadPage } from './pages/upload'
 
 // Imported last on purpose: CSS lands in the bundle in import order, and these
@@ -27,6 +28,7 @@ initializePreferences()
 ready().then(() => {
     router.routes({
         '/': UploadPage,
+        '/f/:id/preview': PreviewPage,
         '/f/:id': DownloadPage,
         '*': MissingPage
     }, view)

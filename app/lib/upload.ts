@@ -30,11 +30,11 @@ export interface UploadOptions {
     onProgress(report: UploadReport): void
 }
 
-// Optional passwords are carried through the resumable upload flow so a file can
-// be protected without forcing the browser to restart its upload from the top.
+// The password is passed only at completion, so a resumed upload uses the
+// current value rather than a value captured when its token was first created.
 export async function uploadFile(file: File, options: UploadOptions, expiresIn: api.LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
     const id = fingerprint(file)
-    const upload = await openUpload(file, id, options, password)
+    const upload = await openUpload(file, id, options)
 
     // Bytes the storage already has. Zero for a fresh upload, possibly almost
     // the whole file for a resumed one.
@@ -71,7 +71,7 @@ export async function uploadFile(file: File, options: UploadOptions, expiresIn: 
     })
 
     options.onStatus('Putting the parts together')
-    const finished = await api.finishUpload(upload.token, expiresIn)
+    const finished = await api.finishUpload(upload.token, expiresIn, password)
 
     // The upload is done, so the note about it is no longer worth keeping.
     await forget(id)
@@ -110,7 +110,7 @@ interface OpenUpload {
 
 // Finds or creates the upload this file belongs to, and asks the storage what it
 // already has.
-async function openUpload(file: File, id: string, options: UploadOptions, password?: string): Promise<OpenUpload> {
+async function openUpload(file: File, id: string, options: UploadOptions): Promise<OpenUpload> {
     const remembered = await recall(id)
 
     if (remembered) {
@@ -127,7 +127,7 @@ async function openUpload(file: File, id: string, options: UploadOptions, passwo
     }
 
     options.onStatus('Preparing the upload')
-    const started = await api.startUpload(file, password)
+    const started = await api.startUpload(file)
 
     await remember({
         fingerprint: id,
