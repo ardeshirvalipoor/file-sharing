@@ -499,6 +499,7 @@ export const UploadPage = () => {
         passwordToggle.el.checked = false
         passwordInput.setValue('')
         termsCheckbox.el.checked = false
+        updateUploadAvailability()
         show(qrModal, false)
         resetPreview()
         setStage('idle')
