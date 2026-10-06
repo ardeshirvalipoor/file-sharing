@@ -11,7 +11,6 @@
 
 import { waitFor } from '@codesuma/baseline'
 import * as api from './api'
-import { describeUploadFailure } from './upload-error'
 import { fingerprint, forget, recall, remember } from './upload-store'
 
 // How many parts travel at once. More than a handful stops helping: the parts
@@ -34,7 +33,7 @@ export interface UploadOptions {
 // The password is passed only at completion, so a resumed upload uses the
 // current value rather than a value captured when its token was first created.
 export async function uploadFile(file: File, options: UploadOptions, expiresIn: api.LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
-    const id = await fingerprint(file)
+    const id = fingerprint(file)
     const upload = await openUpload(file, id, options)
 
     // Bytes the storage already has. Zero for a fresh upload, possibly almost
@@ -83,7 +82,7 @@ export async function uploadFile(file: File, options: UploadOptions, expiresIn: 
 // Throws away an unfinished upload: tells the storage to drop the parts it
 // collected, then forgets our note about it.
 export async function discardUpload(file: File): Promise<void> {
-    const id = await fingerprint(file)
+    const id = fingerprint(file)
     const remembered = await recall(id)
     if (!remembered) return
 
@@ -98,8 +97,8 @@ export async function discardUpload(file: File): Promise<void> {
 }
 
 // Whether an earlier upload of this exact file is waiting to be continued.
-export async function resumableUpload(file: File) {
-    return recall(await fingerprint(file))
+export function resumableUpload(file: File) {
+    return recall(fingerprint(file))
 }
 
 interface OpenUpload {
@@ -180,10 +179,10 @@ function put(url: string, body: Blob, onProgress: (sentBytes: number) => void): 
 
         request.onload = () => {
             if (request.status >= 200 && request.status < 300) resolve()
-            else reject(new Error(describeUploadFailure(`The storage answered ${request.status}`)))
+            else reject(new Error(`The storage answered ${request.status}`))
         }
 
-        request.onerror = () => reject(new Error(describeUploadFailure('The connection dropped')))
+        request.onerror = () => reject(new Error('The connection dropped'))
         request.send(body)
     })
 }

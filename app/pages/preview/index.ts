@@ -61,32 +61,6 @@ export const PreviewPage = () => {
     let downloadUrl = ''
     let ownerPassword = ''
 
-    // Select a browser viewer from the MIME type, falling back to common extensions.
-    function previewType(contentType: string, fileName: string): string {
-        const normalizedType = contentType.toLowerCase().split(';')[0]
-        if (normalizedType.startsWith('image/') || normalizedType.startsWith('video/') || normalizedType === 'application/pdf') {
-            return normalizedType
-        }
-
-        const extension = fileName.toLowerCase().split('.').pop()
-        const knownTypes: Record<string, string> = {
-            bmp: 'image/bmp',
-            gif: 'image/gif',
-            jpeg: 'image/jpeg',
-            jpg: 'image/jpeg',
-            png: 'image/png',
-            svg: 'image/svg+xml',
-            webp: 'image/webp',
-            pdf: 'application/pdf',
-            m4v: 'video/mp4',
-            mov: 'video/quicktime',
-            mp4: 'video/mp4',
-            ogv: 'video/ogg',
-            webm: 'video/webm'
-        }
-        return extension ? knownTypes[extension] ?? normalizedType : normalizedType
-    }
-
     function renderMedia(contentType: string, fileName: string, password?: string) {
         mediaWrap.el.innerHTML = ''
         const query = new URLSearchParams(window.location.search)
@@ -94,8 +68,9 @@ export const PreviewPage = () => {
         else query.delete('password')
         const source = `/api/files/${currentId}/preview?${query.toString()}`
 
-        // Match the media element to a recognized browser format and use inline delivery.
-        const type = previewType(contentType, fileName)
+        // Match the media element to the file's type. The server already guessed a
+        // type from the file name when the uploader's browser reported none.
+        const type = contentType
         if (type.startsWith('image/')) {
             const image = Base('img')
             image.el.src = source

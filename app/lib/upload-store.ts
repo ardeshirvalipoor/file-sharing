@@ -25,31 +25,11 @@ export function ready(): Promise<void> {
     return db.createStore(STORE, 1, { keyPath: 'fingerprint', autoIncrement: false })
 }
 
-// Include sampled file bytes so different files with matching names, sizes, and
-// timestamps cannot accidentally resume the same upload or reuse its share id.
-export async function fingerprint(file: File): Promise<string> {
-    const sampleSize = 64 * 1024
-    const offsets = [...new Set([
-        0,
-        Math.max(0, Math.floor((file.size - sampleSize) / 2)),
-        Math.max(0, file.size - sampleSize)
-    ])]
-    const samples = await Promise.all(offsets.map(offset =>
-        file.slice(offset, Math.min(offset + sampleSize, file.size)).arrayBuffer()
-    ))
-    const metadata = new TextEncoder().encode(JSON.stringify([file.name, file.size, file.lastModified, offsets]))
-    const combined = new Uint8Array(metadata.length + samples.reduce((size, sample) => size + sample.byteLength, 0))
-    combined.set(metadata)
-
-    let cursor = metadata.length
-    for (const sample of samples) {
-        combined.set(new Uint8Array(sample), cursor)
-        cursor += sample.byteLength
-    }
-
-    const digest = await crypto.subtle.digest('SHA-256', combined)
-    const hex = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
-    return `v2:${hex}`
+// Two files with the same name, size and modified date are the same file as far
+// as we are concerned. The browser never tells us where a file lives on disk,
+// so this is the closest thing to an identity available to us.
+export function fingerprint(file: File): string {
+    return `${file.name}:${file.size}:${file.lastModified}`
 }
 
 export function remember(upload: RememberedUpload): Promise<unknown> {

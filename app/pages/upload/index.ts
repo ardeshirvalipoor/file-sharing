@@ -506,27 +506,15 @@ export const UploadPage = () => {
         setStage('idle')
     })
 
-    // Copying a fresh share link uses the browser clipboard when available and a
-    // textarea fallback when permission is blocked. The button text changes to
-    // "Copied" to confirm the action immediately.
+    // Copying a fresh share link uses the browser clipboard, and a textarea
+    // fallback when the clipboard is missing or blocked. The button text changes
+    // to "Copied" to confirm the action immediately.
     copyButton.on('click', async () => {
         const value = currentShareUrl
         if (!value) return
 
         try {
-            if (navigator.clipboard?.writeText) {
-                await navigator.clipboard.writeText(value)
-            } else {
-                const area = document.createElement('textarea')
-                area.value = value
-                area.setAttribute('readonly', 'true')
-                area.style.position = 'fixed'
-                area.style.left = '-9999px'
-                document.body.append(area)
-                area.select()
-                document.execCommand('copy')
-                area.remove()
-            }
+            await navigator.clipboard.writeText(value)
         } catch {
             const area = document.createElement('textarea')
             area.value = value
