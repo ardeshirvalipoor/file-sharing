@@ -5,6 +5,7 @@
 // tells you everything about what the screen can look like.
 
 import { Base, Button, Div, H1, Input, P, Page, Span, waitFor } from '@codesuma/baseline'
+import { toDataURL } from 'qrcode'
 import { Progress } from '../../components/progress'
 import { DropZone } from '../../components/drop-zone'
 import * as api from '../../lib/api'
@@ -570,11 +571,12 @@ export const UploadPage = () => {
     })
 
     // The QR popup keeps mobile scanning easy without hiding the desktop share link.
-    qrButton.on('click', () => {
+    // The code is drawn here in the browser. The share link is the key to the
+    // file, so it must never go to an outside service just to make a picture.
+    qrButton.on('click', async () => {
         const value = currentShareUrl
         if (!value) return
-        qrImage.el.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(value)}`
-        qrImage.el.loading = 'eager'
+        qrImage.el.src = await toDataURL(value, { width: 220 })
         show(qrModal, true)
     })
 
