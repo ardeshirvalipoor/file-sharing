@@ -15,18 +15,12 @@ import {
     CreateMultipartUploadCommand,
     DeleteObjectCommand,
     GetObjectCommand,
-    HeadObjectCommand,
-    ListObjectsV2Command,
     ListPartsCommand,
-    PutObjectCommand,
     S3Client,
     UploadPartCommand
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { DOWNLOAD_URL_TTL, UPLOAD_URL_TTL, config } from '../config'
-import { isFileId, objectKey } from './file-id'
-import { MAX_LINK_LIFETIME_SECONDS } from './share-link'
-
 
 const client = new S3Client({
     // R2 has no regions, but the S3 protocol insists on the field.
@@ -46,40 +40,21 @@ const client = new S3Client({
     responseChecksumValidation: 'WHEN_REQUIRED'
 })
 
-// Limit the full legacy-file scan to once per day instead of every cleanup tick.
-let legacyFileScanAt = 0
-
 export interface StoredPart {
     partNumber: number
     etag: string
     size: number
 }
 
-
-
-export interface RetainedFileRecord {
-    id: string
-    fileName: string
-    contentType: string
-    size: number
-    passwordProtected: boolean
-    expiresAt: number
-    recordedAt: number
-}
-
-// Protected uploads keep only a password hash in the object metadata. That lets
-// the server validate a password later without saving the plain secret anywhere.
 // Opens a multipart upload and returns the id that ties all its parts together.
 // Nothing is stored yet; this only reserves the name.
 export async function createMultipartUpload(key: string, fileName: string, contentType: string): Promise<string> {
-    const metadata: Record<string, string> = { filename: encodeURIComponent(fileName) }
-
     const created = await client.send(new CreateMultipartUploadCommand({
         Bucket: config.r2.bucket,
         Key: key,
         ContentType: contentType,
         // Metadata values must be plain ASCII, and file names often are not.
-        Metadata: metadata
+        Metadata: { filename: encodeURIComponent(fileName) }
     }))
 
     if (!created.UploadId) throw new Error('Storage did not return an upload id')
@@ -135,64 +110,6 @@ export async function completeMultipartUpload(key: string, uploadId: string, par
     }))
 }
 
-// Keep file details in a durable record separate from the expiring payload.
-async function saveFileRecord(record: RetainedFileRecord): Promise<void> {
-    await client.send(new PutObjectCommand({
-        Bucket: config.r2.bucket,
-        Key: `records/${record.id}.json`,
-        Body: JSON.stringify(record),
-        ContentType: 'application/json'
-    }))
-}
-
-// Save the persistent metadata record and an ordered marker for the cleanup worker.
-export async function scheduleFileDeletion(record: RetainedFileRecord): Promise<void> {
-    await saveFileRecord(record)
-    await client.send(new PutObjectCommand({
-        Bucket: config.r2.bucket,
-        Key: expirationMarkerKey(record.id, record.expiresAt),
-        Body: new Uint8Array()
-    }))
-}
-
-// Delete expired files in timestamp order; future markers stop the scan early.
-export async function deleteExpiredFiles(now = Math.floor(Date.now() / 1000)): Promise<number> {
-    let deletedFiles = 0
-
-    while (true) {
-        const listed = await client.send(new ListObjectsV2Command({
-            Bucket: config.r2.bucket,
-            Prefix: 'expirations/',
-            MaxKeys: 1000
-        }))
-        const markers = listed.Contents ?? []
-        if (markers.length === 0) return deletedFiles + await deleteLegacyExpiredFiles(now)
-
-        let deletedMarkers = 0
-        for (const marker of markers) {
-            const key = marker.Key
-            if (!key) continue
-
-            const parsed = parseExpirationMarker(key)
-            if (!parsed) {
-                await client.send(new DeleteObjectCommand({ Bucket: config.r2.bucket, Key: key }))
-                deletedMarkers++
-                continue
-            }
-            if (parsed.expiresAt > now) return deletedFiles + await deleteLegacyExpiredFiles(now)
-
-            await client.send(new DeleteObjectCommand({ Bucket: config.r2.bucket, Key: objectKey(parsed.id) }))
-            await client.send(new DeleteObjectCommand({ Bucket: config.r2.bucket, Key: key }))
-            deletedFiles++
-            deletedMarkers++
-        }
-
-        if (deletedMarkers === 0 || (!listed.IsTruncated && deletedMarkers < markers.length)) {
-            return deletedFiles + await deleteLegacyExpiredFiles(now)
-        }
-    }
-}
-
 // Throws away an unfinished upload and the parts it collected. Without this the
 // parts sit in the bucket costing money forever.
 export async function abortMultipartUpload(key: string, uploadId: string): Promise<void> {
@@ -203,21 +120,26 @@ export async function abortMultipartUpload(key: string, uploadId: string): Promi
     }))
 }
 
+// Removes a finished file for good. Deleting a file that is already gone is not
+// an error, so a cleanup that stops halfway can simply run again.
+export async function deleteFile(key: string): Promise<void> {
+    await client.send(new DeleteObjectCommand({ Bucket: config.r2.bucket, Key: key }))
+}
 
 // A URL that downloads this one file for the next few minutes. The bucket itself
 // stays private, so this is the only way in.
-export function presignDownloadUrl(key: string, fileName: string, expiresIn = DOWNLOAD_URL_TTL): Promise<string> {
-    return presignFileUrl(key, fileName, 'attachment', expiresIn)
+export function presignDownloadUrl(key: string, fileName: string): Promise<string> {
+    return presignFileUrl(key, fileName, 'attachment')
 }
 
 // Preview URLs request inline display and are kept separate from the counted
 // download flow so opening a share page does not increment download totals.
-export function presignPreviewUrl(key: string, fileName: string, contentType: string, expiresIn = DOWNLOAD_URL_TTL): Promise<string> {
-    return presignFileUrl(key, fileName, 'inline', expiresIn, contentType)
+export function presignPreviewUrl(key: string, fileName: string, contentType: string): Promise<string> {
+    return presignFileUrl(key, fileName, 'inline', contentType)
 }
 
 // Sign the same object request with the requested browser disposition.
-function presignFileUrl(key: string, fileName: string, disposition: 'attachment' | 'inline', expiresIn: number, contentType?: string): Promise<string> {
+function presignFileUrl(key: string, fileName: string, disposition: 'attachment' | 'inline', contentType?: string): Promise<string> {
     const command = new GetObjectCommand({
         Bucket: config.r2.bucket,
         Key: key,
@@ -226,101 +148,7 @@ function presignFileUrl(key: string, fileName: string, disposition: 'attachment'
         ...(contentType ? { ResponseContentType: contentType } : {})
     })
 
-    return getSignedUrl(client, command, { expiresIn })
-}
-
-// This reads the object metadata the browser never sees, including an optional
-// legacy password hash for files created before hashes moved to the database.
-export async function headFile(key: string): Promise<{ fileName: string; contentType: string; size: number; passwordHash?: string } | null> {
-    try {
-        const head = await client.send(new HeadObjectCommand({
-            Bucket: config.r2.bucket,
-            Key: key
-        }))
-
-        const metadata = head.Metadata ?? {}
-        const fileName = metadata.filename ? decodeURIComponent(metadata.filename) : ''
-
-        return {
-            fileName: fileName || key.replace(/^files\//, ''),
-            contentType: head.ContentType ?? 'application/octet-stream',
-            size: head.ContentLength ?? 0,
-            passwordHash: metadata.passwordHash
-        }
-    } catch (error: unknown) {
-        const status = typeof error === 'object' && error && 'name' in error ? (error as { name?: string; $metadata?: { httpStatusCode?: number } }).name : undefined
-        const httpStatus = typeof error === 'object' && error && '$metadata' in error ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode : undefined
-
-        if (status === 'NotFound' || httpStatus === 404) return null
-        throw error
-    }
-}
-
-// Order markers by expiration so the sweeper can stop at the first future deadline.
-function expirationMarkerKey(id: string, expiresAt: number): string {
-    return `expirations/${String(expiresAt).padStart(12, '0')}/${id}`
-}
-
-// Parse only marker keys with a valid expiry timestamp and file id.
-function parseExpirationMarker(key: string): { expiresAt: number; id: string } | null {
-    const match = /^expirations\/(\d{12})\/([A-Za-z0-9_-]{16})$/.exec(key)
-    if (!match) return null
-    return { expiresAt: Number(match[1]), id: match[2] }
-}
-
-// Accept only file keys whose suffix is a valid share id before recording metadata.
-function fileIdFromKey(key: string): string | null {
-    const id = key.slice('files/'.length)
-    return key.startsWith('files/') && isFileId(id) ? id : null
-}
-
-// Older files have no marker, so remove them only after every supported link must have expired.
-async function deleteLegacyExpiredFiles(now: number): Promise<number> {
-    const oneDaySeconds = 24 * 60 * 60
-    if (now - legacyFileScanAt < oneDaySeconds) return 0
-
-    const cutoff = now - MAX_LINK_LIFETIME_SECONDS
-    let continuationToken: string | undefined
-    let deletedFiles = 0
-
-    do {
-        const listed = await client.send(new ListObjectsV2Command({
-            Bucket: config.r2.bucket,
-            Prefix: 'files/',
-            MaxKeys: 1000,
-            ContinuationToken: continuationToken
-        }))
-        const expired = (listed.Contents ?? []).filter(file =>
-            file.Key && file.LastModified && Math.floor(file.LastModified.getTime() / 1000) <= cutoff
-        )
-
-        for (const file of expired) {
-            if (!file.Key || !file.LastModified) continue
-            const id = fileIdFromKey(file.Key)
-            if (!id) continue
-
-            const stored = await headFile(file.Key)
-            if (stored) {
-                const uploadedAt = Math.floor(file.LastModified.getTime() / 1000)
-                await saveFileRecord({
-                    id,
-                    fileName: stored.fileName,
-                    contentType: stored.contentType,
-                    size: stored.size,
-                    passwordProtected: Boolean(stored.passwordHash),
-                    expiresAt: uploadedAt + MAX_LINK_LIFETIME_SECONDS,
-                    recordedAt: now
-                })
-            }
-            await client.send(new DeleteObjectCommand({ Bucket: config.r2.bucket, Key: file.Key }))
-        }
-
-        deletedFiles += expired.length
-        continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined
-    } while (continuationToken)
-
-    legacyFileScanAt = now
-    return deletedFiles
+    return getSignedUrl(client, command, { expiresIn: DOWNLOAD_URL_TTL })
 }
 
 // Two spellings of the same name, as the header standard asks for. Old browsers

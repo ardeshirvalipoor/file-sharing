@@ -11,10 +11,7 @@ const expirySeconds: Record<LinkExpiry, number> = {
     '1w': 7 * 24 * 60 * 60
 }
 
-// Use the longest supported lifetime as a safe cleanup bound for older files.
-export const MAX_LINK_LIFETIME_SECONDS = Math.max(...Object.values(expirySeconds))
-
-// Share the same expiration timestamp between the signed URL and the R2 cleanup marker.
+// The same moment goes into the signed link and into the file's row.
 export function shareLinkExpiresAt(duration: LinkExpiry): number {
     return Math.floor(Date.now() / 1000) + expirySeconds[duration]
 }

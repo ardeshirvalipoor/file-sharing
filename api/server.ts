@@ -1,17 +1,18 @@
 import { app } from './app'
 import { config } from './config'
-import { deleteExpiredFiles } from './lib/storage'
+import services from './services'
 
-// Keep expired R2 objects short-lived even when the site receives no requests.
+// Delete expired files once a minute while the machine is awake. An expired link
+// already stops working on its own, so this only frees the space.
 const CLEANUP_INTERVAL_MS = 60 * 1000
-// Prevent overlapping bucket scans if one cleanup run takes longer than a minute.
+// Prevent overlapping runs if one cleanup takes longer than a minute.
 let cleanupRunning = false
 
 async function cleanupExpiredFiles(): Promise<void> {
     if (cleanupRunning) return
     cleanupRunning = true
     try {
-        const deleted = await deleteExpiredFiles()
+        const deleted = await services.files.deleteExpired()
         if (deleted > 0) console.log(`Deleted ${deleted} expired file(s) from R2`)
     } catch (error) {
         console.error('Expired-file cleanup failed:', error)
