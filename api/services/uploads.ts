@@ -90,21 +90,11 @@ export async function finish(token: string, expiresIn: LinkExpiry, password?: st
     // announce a file that is not there.
     // Store only the final password hash in the files row; a resumed upload can
     // therefore use the password entered at the moment it is completed.
+    // The row and the share link get the same expiry, and the cleanup reads it
+    // from the row.
     const passwordHash = password?.trim() ? hashPassword(password.trim()) : null
-    await db.markFileReady(upload.id, passwordHash)
-
-
-    // Give the share link and its R2 cleanup marker the same expiration time.
     const expiresAt = shareLinkExpiresAt(expiresIn)
-    await storage.scheduleFileDeletion({
-        id: upload.id,
-        fileName: upload.fileName,
-        contentType: upload.contentType,
-        size: upload.size,
-        passwordProtected: Boolean(passwordHash),
-        expiresAt,
-        recordedAt: Math.floor(Date.now() / 1000)
-    })
+    await db.markFileReady(upload.id, passwordHash, new Date(expiresAt * 1000))
 
     return { id: upload.id, url: createShareLink(upload.id, expiresIn, expiresAt) }
 }

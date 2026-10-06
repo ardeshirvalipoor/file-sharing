@@ -44,23 +44,34 @@ export async function insertFile(id: string, file: NewFile): Promise<void> {
 
 // The parts are glued together and the object is whole. Only now is there a real
 // file at this id.
-// Completion saves the final optional password hash alongside the ready status.
-export async function markFileReady(id: string, passwordHash: string | null): Promise<void> {
+// Completion saves the final optional password hash and the link's expiry
+// alongside the ready status.
+export async function markFileReady(id: string, passwordHash: string | null, expiresAt: Date): Promise<void> {
     await sql`
         update files
-        set status = 'ready', completed_at = now(), password_hash = ${passwordHash}
+        set status = 'ready', completed_at = now(), password_hash = ${passwordHash}, expires_at = ${expiresAt}
         where id = ${id}
     `
 }
 
-// The person gave up on the upload. We keep the row rather than removing it, so
-// a link that once worked can later be told apart from one that never did.
+// The person gave up on the upload, or its link ran out and the bytes were
+// deleted. We keep the row rather than removing it, so a link that once worked
+// can later be told apart from one that never did.
 export async function markFileDeleted(id: string): Promise<void> {
     await sql`
         update files
         set deleted_at = now()
         where id = ${id}
     `
+}
+
+// Files whose link has run out but whose bytes have not been deleted yet.
+export async function expiredFileIds(): Promise<string[]> {
+    const rows = await sql`
+        select id from files
+        where expires_at <= now() and deleted_at is null
+    `
+    return rows.map(row => row.id)
 }
 
 export interface FileRow {

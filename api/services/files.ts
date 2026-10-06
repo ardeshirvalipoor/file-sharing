@@ -1,5 +1,5 @@
-// Reading a finished file. Two questions only: what is it, and where can the
-// browser fetch it from.
+// A finished file: what it is, where the browser can fetch it from, and deleting
+// it once its link runs out.
 
 import { createHmac } from 'node:crypto'
 import { config } from '../config'
@@ -7,7 +7,6 @@ import * as db from '../lib/db'
 import { isFileId, objectKey } from '../lib/file-id'
 import * as storage from '../lib/storage'
 import { HttpError } from '../lib/http-error'
-import { DOWNLOAD_URL_TTL } from '../config'
 import { verifyPassword, verifyShareLink } from '../lib/share-link'
 
 export interface FileInfo {
@@ -16,13 +15,6 @@ export interface FileInfo {
     contentType: string
     size: number
     protected: boolean
-}
-
-// Who is asking. The handler digs these out of the request, because nothing in
-// this file knows what an Express request is.
-export interface Visitor {
-    address: string
-    userAgent: string | null
 }
 
 // Who is asking. The handler digs these out of the request, because nothing in
@@ -48,7 +40,8 @@ export async function info(id: string, expiry: unknown, signature: unknown, pass
     }
 }
 
-// Keep the short-lived storage URL from lasting beyond the share link itself.
+// A short-lived URL straight to the bucket. The same checks as info() come first,
+// so a dead link gets a clear error instead of a redirect to a URL that fails oddly.
 export async function downloadUrl(id: string, expiry: unknown, signature: unknown, visitor: Visitor, password?: string): Promise<string> {
     verifyShareLink(id, expiry, signature)
 
@@ -89,6 +82,17 @@ export async function previewUrl(id: string, expiry: unknown, signature: unknown
     return storage.presignPreviewUrl(objectKey(id), file.fileName, file.contentType)
 }
 
+// Deletes the bytes of every file whose link has run out. The row stays, marked
+// deleted, as the record that the file was once here.
+export async function deleteExpired(): Promise<number> {
+    const ids = await db.expiredFileIds()
+    for (const id of ids) {
+        await storage.deleteFile(objectKey(id))
+        await db.markFileDeleted(id)
+    }
+    return ids.length
+}
+
 // This hashes the visitor's address before writing a download row, so the
 // database stores only a stable fingerprint and never the raw IP.
 function hashAddress(address: string): string {
@@ -100,20 +104,16 @@ function hashAddress(address: string): string {
 async function readFileInfo(id: string): Promise<FileInfo & { passwordHash: string | null }> {
     if (!isFileId(id)) throw new HttpError(404, 'This link does not point at a file')
 
-    const databaseFile = await db.findFile(id)
-    if (!databaseFile) throw new HttpError(404, 'This file is not here any more')
-
-    const storedFile = await storage.headFile(objectKey(id))
-    if (!storedFile) throw new HttpError(404, 'This file is not here any more')
+    const file = await db.findFile(id)
+    if (!file) throw new HttpError(404, 'This file is not here any more')
 
     return {
         id,
-        fileName: databaseFile.fileName,
-        contentType: previewContentType(databaseFile.contentType, databaseFile.fileName),
-        size: databaseFile.size,
-        // Fall back to object metadata only for files predating the DB column.
-        protected: Boolean(databaseFile.passwordHash || storedFile.passwordHash),
-        passwordHash: databaseFile.passwordHash || storedFile.passwordHash || null
+        fileName: file.fileName,
+        contentType: previewContentType(file.contentType, file.fileName),
+        size: file.size,
+        protected: Boolean(file.passwordHash),
+        passwordHash: file.passwordHash
     }
 }
 
