@@ -66,6 +66,15 @@ export async function downloadUrl(id: string, expiry: unknown, signature: unknow
     return storage.presignDownloadUrl(objectKey(id), file.fileName)
 }
 
+// Types a browser can only show as a picture, a video or a PDF. Anything else,
+// SVG and HTML included, could run as a web page on the storage domain, so it is
+// never shown inline. The uploader chooses the type, so this is an exact match.
+const INLINE_TYPES = new Set([
+    'image/avif', 'image/bmp', 'image/gif', 'image/jpeg', 'image/png', 'image/webp',
+    'video/mp4', 'video/ogg', 'video/quicktime', 'video/webm',
+    'application/pdf'
+])
+
 // Preview access validates the same share link and password but deliberately
 // avoids recording a download.
 export async function previewUrl(id: string, expiry: unknown, signature: unknown, password?: string): Promise<string> {
@@ -73,6 +82,10 @@ export async function previewUrl(id: string, expiry: unknown, signature: unknown
 
     const file = await readFileInfo(id)
     requirePassword(file, password)
+
+    // Any other type goes out as a download. An <img> tag still shows an SVG
+    // sent this way, because it ignores the download header.
+    if (!INLINE_TYPES.has(file.contentType)) return storage.presignDownloadUrl(objectKey(id), file.fileName)
     return storage.presignPreviewUrl(objectKey(id), file.fileName, file.contentType)
 }
 
