@@ -42,11 +42,6 @@ export async function start(file: NewUpload): Promise<StartedUpload> {
 
     const uploadId = await storage.createMultipartUpload(objectKey(id), file.fileName, file.contentType)
 
-    // The row goes in before anything reaches R2. If this fails, nothing was
-    // created and the person sees an error. The other order would leave parts in
-    // the bucket that no row points at, which is the one mess we cannot find later.
-    await db.insertFile(id, file)
-
     return {
         token: writeUploadToken({ id, uploadId, fileName: file.fileName, contentType: file.contentType, size: file.size }),
         partSize: PART_SIZE,
