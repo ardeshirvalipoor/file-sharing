@@ -1,5 +1,11 @@
 import type { Request, Response } from 'express'
+import { z } from 'zod'
+import { HttpError } from '../lib/http-error'
 import services from '../services'
+
+const revokeSchema = z.object({
+    revocationToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/)
+})
 
 // GET /api/files/:id
 export async function info(req: Request<{ id: string }>, res: Response) {
@@ -23,4 +29,14 @@ export async function download(req: Request<{ id: string }>, res: Response) {
 export async function preview(req: Request<{ id: string }>, res: Response) {
     const password = typeof req.query.password === 'string' ? req.query.password : undefined
     res.redirect(302, await services.files.previewUrl(req.params.id, req.query.expires, req.query.signature, password))
+}
+
+// POST /api/files/:id/revoke
+export async function revoke(req: Request<{ id: string }>, res: Response) {
+    const result = revokeSchema.safeParse(req.body)
+    if (!result.success) {
+        throw new HttpError(400, 'A valid revocation token is required')
+    }
+    await services.files.revoke(req.params.id, result.data.revocationToken)
+    res.status(204).end()
 }

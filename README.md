@@ -122,6 +122,22 @@ machine. The file itself goes straight between the browser and Cloudflare.
 The bucket stays private throughout. A presigned URL that lasts five minutes is
 the only way in, and our machine is the only thing that can make one.
 
+### Revoking a link
+
+The upload result includes a **Revoke link** action. Revoking marks the link
+inactive immediately, and future visits, previews, and downloads using that
+share link are rejected without waiting for its expiry. The revocation
+credential is kept in the uploader's browser storage and is never included in
+the public URL. Clearing that browser's site data removes the ability to revoke
+the link from that browser.
+
+Links created before this feature was deployed do not have a revocation
+credential and cannot be revoked through the uploader page.
+
+Direct storage download URLs issued before revocation are short-lived and can
+remain usable for up to five minutes. Revocation disables the share link; it
+does not delete the stored file.
+
 An id whose upload never finished, and one that was cancelled, both answer step 1
 with a 404. They look exactly like a link that was never real, which is the
 right answer.
@@ -201,7 +217,9 @@ pooler string:
 npx supabase db push --db-url "postgresql://postgres.YOURREF:PASSWORD@aws-1-YOURREGION.pooler.supabase.com:5432/postgres"
 ```
 
-That reads `supabase/migrations` and creates three tables.
+That reads `supabase/migrations` and creates the schema. Run the same command
+when upgrading an existing deployment so new migrations, including the
+revocation columns, are applied before deploying the updated server.
 
 | Table       | One row for                            |
 | ----------- | -------------------------------------- |
@@ -281,12 +299,11 @@ user interface.
 ## Limits and what is missing
 
 - One file per upload, up to 1 GB.
-- A share link never expires. The `files` table has an `expires_at` column, but
-  nothing writes to it. Add a lifecycle rule on the bucket if you want files to
-  disappear after a week.
-- Anyone holding a link can download the file. There are no accounts and no
-  passwords. The `profiles` table and the `owner_id` column on `files` are there,
-  waiting, and nothing fills them in.
+- A signed share link expires after the selected hour, day, or week. The
+  `files.expires_at` column is not used; a separate R2 cleanup marker removes
+  the stored object after its link expires.
+- Anyone holding an active link can download the file. There are no accounts;
+  optional passwords and link revocation are supported.
 - Every download is recorded, and `files.download_count` is kept up to date.
   Nothing shows either of them to anybody yet.
 - An interrupted upload can be resumed for 7 days. New R2 buckets come with a

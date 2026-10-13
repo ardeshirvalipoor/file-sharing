@@ -29,13 +29,14 @@ type TranslationKey =
     | 'dropTitle' | 'dropHint' | 'resumeNote' | 'upload' | 'continueUpload' | 'discard'
     | 'preparingUpload' | 'assemblingParts' | 'sendingParts' | 'continuingUpload'
     | 'expirySummary' | 'linkExpiresAt' | 'copy' | 'copied' | 'openLink' | 'qrCode' | 'qrCodeTitle' | 'close' | 'tryAgain' | 'sendAnother'
+    | 'revokeLink' | 'linkRevoked' | 'revocationNotSaved' | 'revocationStatusNotSaved'
     // These messages explain the consent gate and required upload password.
     | 'acceptBeforeSelect' | 'acceptBeforeUpload' | 'acceptBeforeUse' | 'passwordRequired' | 'tooLarge' | 'passwordTooShort' | 'uploadFailed'
     // Dedicated preview actions keep their labels consistent across locales.
     | 'loading' | 'protectedTitle' | 'protectedPrompt' | 'enterPassword' | 'unlock' | 'download' | 'preview' | 'backToShare' | 'previewUnavailable'
     | 'nothingHere' | 'linkDidNotWork' | 'pleaseEnterPassword' | 'missingTitle' | 'missingIntro' | 'sendFile'
 
-type Dictionary = Record<TranslationKey, string>
+type Dictionary = Partial<Record<TranslationKey, string>>
 
 const translations: Partial<Record<Language, Dictionary>> = {
     en: {
@@ -54,6 +55,7 @@ const translations: Partial<Record<Language, Dictionary>> = {
         assemblingParts: 'Putting the parts together', sendingParts: 'Sending {missing} of {total} parts',
         continuingUpload: 'Continuing an earlier upload, {sent} of {total} parts already sent',
         expirySummary: 'This link expires in {duration}.', linkExpiresAt: 'Link expires {date}', copy: 'Copy', copied: 'Copied', openLink: 'Open', qrCode: 'QR', qrCodeTitle: 'Scan this QR code', close: 'Close', tryAgain: 'Try again', sendAnother: 'Send another file',
+        revokeLink: 'Revoke link', linkRevoked: 'Link revoked', revocationNotSaved: 'This browser could not save revocation access. Revoke the link from this page before navigating away.', revocationStatusNotSaved: 'The link was revoked, but this browser could not save that status.',
         acceptBeforeSelect: 'Please accept the Terms of Service and Privacy Policy before selecting a file.',
         acceptBeforeUpload: 'Please accept the Terms of Service and Privacy Policy before uploading.',
         acceptBeforeUse: 'Check the box above to use this tool.',

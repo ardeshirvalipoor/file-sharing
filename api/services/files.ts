@@ -8,6 +8,7 @@ import { isFileId, objectKey } from '../lib/file-id'
 import * as storage from '../lib/storage'
 import { HttpError } from '../lib/http-error'
 import { verifyPassword, verifyShareLink } from '../lib/share-link'
+import { hashRevocationToken } from '../lib/share-revocation'
 
 export interface FileInfo {
     id: string
@@ -92,6 +93,11 @@ export async function deleteExpired(): Promise<number> {
     }
     return ids.length
 }
+export async function revoke(id: string, revocationToken: string): Promise<void> {
+    if (!isFileId(id) || !await db.revokeFile(id, hashRevocationToken(revocationToken))) {
+        throw new HttpError(404, 'This revocation token is not valid for this file')
+    }
+}
 
 // This hashes the visitor's address before writing a download row, so the
 // database stores only a stable fingerprint and never the raw IP.
@@ -106,7 +112,7 @@ async function readFileInfo(id: string): Promise<FileInfo & { passwordHash: stri
 
     const file = await db.findFile(id)
     if (!file) throw new HttpError(404, 'This file is not here any more')
-
+    if (file.revokedAt) throw new HttpError(410, 'This share link has been revoked')
     return {
         id,
         fileName: file.fileName,

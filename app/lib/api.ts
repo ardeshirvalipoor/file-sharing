@@ -51,8 +51,12 @@ export async function partUrl(token: string, partNumber: number): Promise<string
 }
 
 // Completion carries the latest password choice, including when reusing a saved token.
-export async function finishUpload(token: string, expiresIn: LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
+export async function finishUpload(token: string, expiresIn: LinkExpiry, password?: string): Promise<{ id: string; url: string; revocationToken: string }> {
     return unwrap(await http.post(`/api/uploads/${token}/complete`, { expiresIn, password }))
+}
+
+export async function revokeShareLink(id: string, revocationToken: string): Promise<void> {
+    unwrap(await http.post(`/api/files/${id}/revoke`, { revocationToken }))
 }
 
 export async function cancelUpload(token: string): Promise<void> {

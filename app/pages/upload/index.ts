@@ -12,6 +12,7 @@ import * as api from '../../lib/api'
 import { fileSize } from '../../lib/format'
 import { discardUpload, resumableUpload, uploadFile } from '../../lib/upload'
 import { consumeUploaderPassword, storeUploaderPassword } from '../../lib/uploader-password'
+import { getRevocationToken, isShareRevoked, markShareRevoked, storeRevocationToken } from '../../lib/share-revocation'
 import { show } from '../../lib/show'
 import { createPreferencesBar, t, translateUploadStatus } from '../../lib/preferences'
 import styles from './index.module.css'
@@ -250,9 +251,12 @@ export const UploadPage = () => {
     const againButton = Button(t('sendAnother'))
     againButton.addClass('button', 'secondary')
 
+    const revokeButton = Button(t('revokeLink'))
+    revokeButton.addClass('button', 'secondary')
+
     const endActions = Div()
     endActions.addClass('actions')
-    endActions.append(retryButton, againButton)
+    endActions.append(retryButton, revokeButton, againButton)
 
     card.append(heading, intro, expiryRow, passwordRow, dropZone, previewWrap, fileRow, resumeNote, actions, termsRow, progress, status, shareRow, expirySummary, error, endActions)
     page.append(preferencesBar, card, benefitsWrap, aboutWrap, qrModal)
@@ -263,6 +267,9 @@ export const UploadPage = () => {
     let canResume = false
     let previewUrl: string | null = null
     let currentShareUrl = ''
+    let currentRevocationToken = ''
+    let revocationTokenSaved = true
+    let linkRevoked = false
     // Keep viewer URLs identical to the public share link.
     function uploaderLink(value: string): URL {
         const link = new URL(value)
@@ -296,14 +303,24 @@ export const UploadPage = () => {
 
             // Consume the restoration URL so refreshing returns to a clean upload page.
             window.history.replaceState(null, '', '/')
+            currentShareUrl = `${shareUrl.origin}${shareUrl.pathname}${shareUrl.search}`
+            shareInput.setValue(currentShareUrl)
+            currentRevocationToken = getRevocationToken(match[1]) ?? ''
+            if (isShareRevoked(match[1])) {
+                linkRevoked = true
+                expirySummary.text(t('linkRevoked'))
+                chosen = null
+                canResume = false
+                setStage('done')
+                return
+            }
+
             const ownerPassword = consumeUploaderPassword(match[1]) ?? ''
             const file = await api.fileInfo(match[1], ownerPassword || undefined, shareUrl)
             chosen = null
             canResume = false
             fileName.text(file.fileName)
             fileMeta.text(fileSize(file.size))
-            currentShareUrl = `${shareUrl.origin}${shareUrl.pathname}${shareUrl.search}`
-            shareInput.setValue(currentShareUrl)
             expirySummary.text(t('linkExpiresAt', {
                 date: new Date(Number(shareUrl.searchParams.get('expires')) * 1000).toLocaleString()
             }))
@@ -346,6 +363,7 @@ export const UploadPage = () => {
         show(error, stage === 'failed')
         show(endActions, stage === 'done' || stage === 'failed')
         show(retryButton, stage === 'failed')
+        show(revokeButton, stage === 'done' && Boolean(currentRevocationToken) && !linkRevoked)
     }
 
     function resetPreview() {
@@ -446,6 +464,8 @@ export const UploadPage = () => {
         const expiresIn = (expirySelect.el as HTMLSelectElement).value as api.LinkExpiry
         // Clear any earlier result before this upload starts so actions cannot reuse a stale link.
         currentShareUrl = ''
+        currentRevocationToken = ''
+        linkRevoked = false
         shareInput.setValue('')
         progress.reset()
         status.text(t('preparingUpload'))
@@ -458,10 +478,14 @@ export const UploadPage = () => {
             }, expiresIn, password)
 
             currentShareUrl = finished.url
+            currentRevocationToken = finished.revocationToken
+            revocationTokenSaved = storeRevocationToken(finished.id, finished.revocationToken)
             shareInput.setValue(currentShareUrl)
             // Every completed upload can open its dedicated preview or download page.
             show(previewButton, true)
-            expirySummary.text(t('expirySummary', { duration: expiryChoices.find(choice => choice.value === expiresIn)?.label ?? '' }))
+            expirySummary.text(revocationTokenSaved
+                ? t('expirySummary', { duration: expiryChoices.find(choice => choice.value === expiresIn)?.label ?? '' })
+                : t('revocationNotSaved'))
             canResume = false
             setStage('done')
         } catch (problem) {
@@ -483,6 +507,26 @@ export const UploadPage = () => {
         void run()
     })
     retryButton.on('click', () => { void run() })
+
+    revokeButton.on('click', async () => {
+        if (!currentRevocationToken || linkRevoked) return
+
+        const match = /^\/f\/([^/]+)/.exec(new URL(currentShareUrl).pathname)
+        if (!match) return
+
+        revokeButton.el.disabled = true
+        try {
+            await api.revokeShareLink(match[1], currentRevocationToken)
+            linkRevoked = true
+            currentRevocationToken = ''
+            expirySummary.text(markShareRevoked(match[1]) ? t('linkRevoked') : t('revocationStatusNotSaved'))
+            show(revokeButton, false)
+        } catch (problem) {
+            error.text(problem instanceof Error ? problem.message : t('uploadFailed'))
+            show(error, true)
+            revokeButton.el.disabled = false
+        }
+    })
 
     discardButton.on('click', async () => {
         if (!chosen) return

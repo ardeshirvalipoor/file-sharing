@@ -11,6 +11,7 @@ import * as storage from '../lib/storage'
 import { readUploadToken, writeUploadToken } from '../lib/upload-token'
 import { HttpError } from '../lib/http-error'
 import { createShareLink, hashPassword, LinkExpiry, shareLinkExpiresAt } from '../lib/share-link'
+import { createRevocationToken, hashRevocationToken } from '../lib/share-revocation'
 
 // Upload setup contains only file details; password protection is chosen when
 // the upload finishes so it works the same for fresh and resumed uploads.
@@ -70,7 +71,7 @@ export async function partUrl(token: string, partNumber: number): Promise<string
 }
 
 // Step four. Glue the parts together and return the link to share.
-export async function finish(token: string, expiresIn: LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
+export async function finish(token: string, expiresIn: LinkExpiry, password?: string): Promise<{ id: string; url: string; revocationToken: string }> {
     const upload = readUploadToken(token)
     const key = objectKey(upload.id)
 
@@ -91,12 +92,15 @@ export async function finish(token: string, expiresIn: LinkExpiry, password?: st
     // Store only the final password hash in the files row; a resumed upload can
     // therefore use the password entered at the moment it is completed.
     // The row and the share link get the same expiry, and the cleanup reads it
-    // from the row.
+    // from the row. The revocation capability is returned once and only its hash
+    // is persisted.
     const passwordHash = password?.trim() ? hashPassword(password.trim()) : null
-    const expiresAt = shareLinkExpiresAt(expiresIn)
-    await db.markFileReady(upload.id, passwordHash, new Date(expiresAt * 1000))
+    const revocationToken = createRevocationToken()
 
-    return { id: upload.id, url: createShareLink(upload.id, expiresIn, expiresAt) }
+    const expiresAt = shareLinkExpiresAt(expiresIn)
+    await db.markFileReady(upload.id, passwordHash, new Date(expiresAt * 1000), hashRevocationToken(revocationToken))
+
+    return { id: upload.id, url: createShareLink(upload.id, expiresIn, expiresAt), revocationToken }
 }
 
 // Give up on an upload and let the storage throw away the parts it collected.
