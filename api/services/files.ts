@@ -94,7 +94,16 @@ export async function deleteExpired(): Promise<number> {
     return ids.length
 }
 export async function revoke(id: string, revocationToken: string): Promise<void> {
-    if (!isFileId(id) || !await db.revokeFile(id, hashRevocationToken(revocationToken))) {
+    if (!isFileId(id)) {
+        throw new HttpError(404, 'This revocation token is not valid for this file')
+    }
+
+    const before = await db.revocationState(id)
+    if (before && (before.deletedAt || before.revokedAt)) {
+        return
+    }
+
+    if (!await db.revokeFile(id, hashRevocationToken(revocationToken))) {
         throw new HttpError(404, 'This revocation token is not valid for this file')
     }
 }

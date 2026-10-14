@@ -108,19 +108,55 @@ export async function findFile(id: string): Promise<FileRow | null> {
     }
 }
 
+export interface RevocationState {
+    deletedAt: Date | null
+    revokedAt: Date | null
+}
+
+export async function revocationState(id: string): Promise<RevocationState | null> {
+    const [row] = await sql`
+        select deleted_at, revoked_at
+        from files
+        where id = ${id}
+            and status = 'ready'
+    `
+    if (!row) return null
+    return {
+        deletedAt: row.deleted_at,
+        revokedAt: row.revoked_at
+    }
+}
+
 // The raw revocation token never reaches the database. The update also makes
 // repeated revocation requests safe while rejecting unrelated credentials.
 export async function revokeFile(id: string, revocationTokenHash: string): Promise<boolean> {
     const [row] = await sql`
+        with match as (
+            select id
+            from files
+            where id = ${id}
+                and status = 'ready'
+                and revocation_token_hash = ${revocationTokenHash}
+        )
         update files
-        set revoked_at = coalesce(revoked_at, now())
+        set revoked_at = coalesce(revoked_at, now()),
+            expires_at = least(expires_at, now())
+        from match
+        where files.id = match.id
+            and files.deleted_at is null
+        returning files.id
+    `
+    if (row) return true
+
+    const [deleted] = await sql`
+        select id
+        from files
         where id = ${id}
             and status = 'ready'
-            and deleted_at is null
+            and deleted_at is not null
             and revocation_token_hash = ${revocationTokenHash}
-        returning id
     `
-    return Boolean(row)
+    return Boolean(deleted)
 }
 
 // One row per download, and a running total kept on the file itself.

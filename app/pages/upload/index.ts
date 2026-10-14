@@ -12,7 +12,7 @@ import * as api from '../../lib/api'
 import { fileSize } from '../../lib/format'
 import { discardUpload, resumableUpload, uploadFile } from '../../lib/upload'
 import { consumeUploaderPassword, storeUploaderPassword } from '../../lib/uploader-password'
-import { getRevocationToken, isShareRevoked, markShareRevoked, storeRevocationToken } from '../../lib/share-revocation'
+import { getRevocationToken, storeRevocationToken } from '../../lib/share-revocation'
 import { show } from '../../lib/show'
 import { createPreferencesBar, t, translateUploadStatus } from '../../lib/preferences'
 import styles from './index.module.css'
@@ -238,6 +238,31 @@ export const UploadPage = () => {
     qrDialog.append(qrTitle, qrImage, qrCloseButton)
     qrModal.append(qrDialog)
 
+    // The revoke action uses an inline modal instead of browser.confirm() so the
+    // destructive flow stays inside the app, keeps the same visual language, and
+    // gives a clear cancel path before the share link is permanently disabled.
+    const revokeConfirmModal = Div()
+    revokeConfirmModal.addClass('revoke-modal', 'hidden')
+    const revokeConfirmDialog = Div()
+    revokeConfirmDialog.addClass('revoke-dialog')
+    const revokeConfirmTitle = Base('h3')
+    revokeConfirmTitle.addClass('revoke-title')
+    revokeConfirmTitle.text(t('confirmRevoke'))
+    // This message explains the real impact of the revoke action before the HTTP
+    // request is sent, so the user understands that the link stops working for
+    // everyone who has it and that the action is not reversible in the browser.
+    const revokeConfirmText = P(t('revokeWarning'))
+    revokeConfirmText.addClass('revoke-message')
+    const revokeConfirmActions = Div()
+    revokeConfirmActions.addClass('revoke-actions')
+    const cancelRevokeButton = Button(t('close'))
+    cancelRevokeButton.addClass('button', 'secondary')
+    const confirmRevokeButton = Button(t('revokeLink'))
+    confirmRevokeButton.addClass('button', 'danger')
+    revokeConfirmActions.append(cancelRevokeButton, confirmRevokeButton)
+    revokeConfirmDialog.append(revokeConfirmTitle, revokeConfirmText, revokeConfirmActions)
+    revokeConfirmModal.append(revokeConfirmDialog)
+
     // Confirm the selected expiration beside the completed share link.
     const expirySummary = P('')
     expirySummary.addClass('status')
@@ -252,14 +277,14 @@ export const UploadPage = () => {
     againButton.addClass('button', 'secondary')
 
     const revokeButton = Button(t('revokeLink'))
-    revokeButton.addClass('button', 'secondary')
+    revokeButton.addClass('button', 'secondary', 'danger')
 
     const endActions = Div()
     endActions.addClass('actions')
     endActions.append(retryButton, revokeButton, againButton)
 
     card.append(heading, intro, expiryRow, passwordRow, dropZone, previewWrap, fileRow, resumeNote, actions, termsRow, progress, status, shareRow, expirySummary, error, endActions)
-    page.append(preferencesBar, card, benefitsWrap, aboutWrap, qrModal)
+    page.append(preferencesBar, card, benefitsWrap, aboutWrap, qrModal, revokeConfirmModal)
 
     // --- state ---------------------------------------------------------------
 
@@ -306,14 +331,6 @@ export const UploadPage = () => {
             currentShareUrl = `${shareUrl.origin}${shareUrl.pathname}${shareUrl.search}`
             shareInput.setValue(currentShareUrl)
             currentRevocationToken = getRevocationToken(match[1]) ?? ''
-            if (isShareRevoked(match[1])) {
-                linkRevoked = true
-                expirySummary.text(t('linkRevoked'))
-                chosen = null
-                canResume = false
-                setStage('done')
-                return
-            }
 
             const ownerPassword = consumeUploaderPassword(match[1]) ?? ''
             const file = await api.fileInfo(match[1], ownerPassword || undefined, shareUrl)
@@ -467,6 +484,9 @@ export const UploadPage = () => {
         currentRevocationToken = ''
         linkRevoked = false
         shareInput.setValue('')
+        expirySummary.text('')
+        error.text('')
+        show(error, false)
         progress.reset()
         status.text(t('preparingUpload'))
         setStage('uploading')
@@ -483,9 +503,8 @@ export const UploadPage = () => {
             shareInput.setValue(currentShareUrl)
             // Every completed upload can open its dedicated preview or download page.
             show(previewButton, true)
-            expirySummary.text(revocationTokenSaved
-                ? t('expirySummary', { duration: expiryChoices.find(choice => choice.value === expiresIn)?.label ?? '' })
-                : t('revocationNotSaved'))
+            const expiryText = t('expirySummary', { duration: expiryChoices.find(choice => choice.value === expiresIn)?.label ?? '' })
+            expirySummary.text(revocationTokenSaved ? expiryText : `${expiryText} ${t('revocationNotSaved')}`)
             canResume = false
             setStage('done')
         } catch (problem) {
@@ -508,24 +527,46 @@ export const UploadPage = () => {
     })
     retryButton.on('click', () => { void run() })
 
-    revokeButton.on('click', async () => {
+    // The modal opens before the HTTP revoke request so the user can decide to
+    // abort the destructive action without accidentally disabling the link.
+    revokeButton.on('click', () => {
         if (!currentRevocationToken || linkRevoked) return
 
         const match = /^\/f\/([^/]+)/.exec(new URL(currentShareUrl).pathname)
         if (!match) return
 
+        show(revokeConfirmModal, true)
+    })
+
+    // The actual revocation request only runs after the user confirms in the app's
+    // own dialog, keeping the destructive action visible and consistent with the
+    // rest of the upload flow.
+    confirmRevokeButton.on('click', async () => {
+        const match = /^\/f\/([^/]+)/.exec(new URL(currentShareUrl).pathname)
+        if (!currentRevocationToken || linkRevoked || !match) {
+            show(revokeConfirmModal, false)
+            return
+        }
+
+        show(revokeConfirmModal, false)
         revokeButton.el.disabled = true
         try {
             await api.revokeShareLink(match[1], currentRevocationToken)
             linkRevoked = true
             currentRevocationToken = ''
-            expirySummary.text(markShareRevoked(match[1]) ? t('linkRevoked') : t('revocationStatusNotSaved'))
+            expirySummary.text(t('linkRevoked'))
             show(revokeButton, false)
         } catch (problem) {
             error.text(problem instanceof Error ? problem.message : t('uploadFailed'))
             show(error, true)
+        } finally {
             revokeButton.el.disabled = false
         }
+    })
+
+    cancelRevokeButton.on('click', () => show(revokeConfirmModal, false))
+    revokeConfirmModal.el.addEventListener('click', (event) => {
+        if (event.target === revokeConfirmModal.el) show(revokeConfirmModal, false)
     })
 
     discardButton.on('click', async () => {
@@ -540,12 +581,18 @@ export const UploadPage = () => {
         chosen = null
         canResume = false
         currentShareUrl = ''
+        currentRevocationToken = ''
+        linkRevoked = false
         shareInput.setValue('')
+        expirySummary.text('')
+        error.text('')
+        show(error, false)
         passwordToggle.el.checked = false
         passwordInput.setValue('')
         termsCheckbox.el.checked = false
         updateUploadAvailability()
         show(qrModal, false)
+        show(revokeConfirmModal, false)
         resetPreview()
         setStage('idle')
     })
