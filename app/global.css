@@ -256,12 +256,26 @@ body {
     background: rgba(15, 23, 18, .42);
 }
 
-.qr-dialog {
+/* This custom revoke dialog keeps the destructive action inside the app so the
+   user sees the warning, understands the impact, and can cancel before the share
+   link is disabled. */
+.revoke-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 18, .48);
+}
+
+.qr-dialog,
+.revoke-dialog {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 16px;
-    width: min(90vw, 320px);
+    width: min(90vw, 360px);
     padding: 20px 18px 18px;
     border: 1px solid var(--line);
     border-radius: 16px;
@@ -269,11 +283,32 @@ body {
     box-shadow: var(--shadow);
 }
 
-.qr-title {
+.qr-title,
+.revoke-title {
     margin: 0;
     color: var(--ink);
     font-size: 18px;
     font-weight: 700;
+}
+
+.revoke-title {
+    width: 100%;
+    text-align: left;
+}
+
+.revoke-message {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+    text-align: left;
+}
+
+.revoke-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    width: 100%;
 }
 
 .qr-image {
@@ -421,6 +456,17 @@ html[dir="rtl"] .actions {
 .button.secondary:hover {
     border-color: #839187;
     background: var(--button-secondary-hover);
+}
+
+.button.danger {
+    border-color: rgba(201, 42, 42, .38);
+    background: rgba(201, 42, 42, .08);
+    color: var(--danger);
+}
+
+.button.danger:hover {
+    border-color: rgba(201, 42, 42, .6);
+    background: rgba(201, 42, 42, .12);
 }
 
 /* Resume notes and errors stay readable while borrowing the same restrained palette. */

@@ -44,12 +44,13 @@ export async function insertFile(id: string, file: NewFile): Promise<void> {
 
 // The parts are glued together and the object is whole. Only now is there a real
 // file at this id.
-// Completion saves the final optional password hash and the link's expiry
-// alongside the ready status.
-export async function markFileReady(id: string, passwordHash: string | null, expiresAt: Date): Promise<void> {
+// Completion saves the final optional password hash, the link's expiry and
+// the revocation token hash alongside the ready status.
+export async function markFileReady(id: string, passwordHash: string | null, expiresAt: Date, revocationTokenHash: string): Promise<void> {
     await sql`
         update files
-        set status = 'ready', completed_at = now(), password_hash = ${passwordHash}, expires_at = ${expiresAt}
+        set status = 'ready', completed_at = now(), password_hash = ${passwordHash}, expires_at = ${expiresAt},
+            revocation_token_hash = ${revocationTokenHash}
         where id = ${id}
     `
 }
@@ -81,6 +82,7 @@ export interface FileRow {
     size: number
     // Password verification uses this hash without reading it from object storage.
     passwordHash: string | null
+    revokedAt: Date | null
 }
 
 // The one question a share link asks: is there a file at this id that somebody
@@ -88,7 +90,7 @@ export interface FileRow {
 // cancelled, both answer no, the same as an id that was never used.
 export async function findFile(id: string): Promise<FileRow | null> {
     const [row] = await sql`
-        select id, file_name, content_type, size, password_hash
+        select id, file_name, content_type, size, password_hash, revoked_at
         from files
         where id = ${id} and status = 'ready' and deleted_at is null
     `
@@ -101,8 +103,60 @@ export async function findFile(id: string): Promise<FileRow | null> {
         fileName: row.file_name,
         contentType: row.content_type,
         size: Number(row.size),
-        passwordHash: row.password_hash
+        passwordHash: row.password_hash,
+        revokedAt: row.revoked_at
     }
+}
+
+export interface RevocationState {
+    deletedAt: Date | null
+    revokedAt: Date | null
+}
+
+export async function revocationState(id: string): Promise<RevocationState | null> {
+    const [row] = await sql`
+        select deleted_at, revoked_at
+        from files
+        where id = ${id}
+            and status = 'ready'
+    `
+    if (!row) return null
+    return {
+        deletedAt: row.deleted_at,
+        revokedAt: row.revoked_at
+    }
+}
+
+// The raw revocation token never reaches the database. The update also makes
+// repeated revocation requests safe while rejecting unrelated credentials.
+export async function revokeFile(id: string, revocationTokenHash: string): Promise<boolean> {
+    const [row] = await sql`
+        with match as (
+            select id
+            from files
+            where id = ${id}
+                and status = 'ready'
+                and revocation_token_hash = ${revocationTokenHash}
+        )
+        update files
+        set revoked_at = coalesce(revoked_at, now()),
+            expires_at = least(expires_at, now())
+        from match
+        where files.id = match.id
+            and files.deleted_at is null
+        returning files.id
+    `
+    if (row) return true
+
+    const [deleted] = await sql`
+        select id
+        from files
+        where id = ${id}
+            and status = 'ready'
+            and deleted_at is not null
+            and revocation_token_hash = ${revocationTokenHash}
+    `
+    return Boolean(deleted)
 }
 
 // One row per download, and a running total kept on the file itself.

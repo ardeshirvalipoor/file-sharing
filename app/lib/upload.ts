@@ -32,7 +32,7 @@ export interface UploadOptions {
 
 // The password is passed only at completion, so a resumed upload uses the
 // current value rather than a value captured when its token was first created.
-export async function uploadFile(file: File, options: UploadOptions, expiresIn: api.LinkExpiry, password?: string): Promise<{ id: string; url: string }> {
+export async function uploadFile(file: File, options: UploadOptions, expiresIn: api.LinkExpiry, password?: string): Promise<{ id: string; url: string; revocationToken: string }> {
     const id = fingerprint(file)
     const upload = await openUpload(file, id, options)
 
