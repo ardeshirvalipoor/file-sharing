@@ -1,4 +1,4 @@
-app = "filesharing"
+app = "linkifyapp"
 primary_region = "ams"
 
 [build]
@@ -7,7 +7,7 @@ primary_region = "ams"
 # Not a secret, so it lives here where you can read it. Share links are built
 # from this address, so it has to match how people reach the service.
 [env]
-  PUBLIC_BASE_URL = "https://filesharing.fly.dev"
+  PUBLIC_BASE_URL = "https://linkifyapp.fly.dev"
 
 [http_service]
   internal_port = 3000
